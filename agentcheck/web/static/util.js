@@ -100,3 +100,12 @@ export function collisionMessage(e) {
   if (e.status === 502) return "The check service is unavailable. That is not a pass.";
   return null;
 }
+
+export function openSheet(which) {
+  const el = $("sheet-" + which);
+  if (!el) return;
+  el.hidden = false;
+  el.querySelector("textarea,input,button")?.focus?.();
+}
+
+export function closeSheets() { document.querySelectorAll(".sheet").forEach((s) => (s.hidden = true)); }

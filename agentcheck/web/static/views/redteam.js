@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { $, esc, collisionMessage } from "../util.js";
 import { state } from "../state.js";
 import { currentRubric } from "./rubrics.js";
+import { loadUsage } from "../queue.js";
 
 export function renderRedteamIdle() {
   // The picker is priced from the corpus, so make sure it is loaded even if
