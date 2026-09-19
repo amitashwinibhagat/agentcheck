@@ -27,6 +27,7 @@ from agentcheck import policies
 from agentcheck import workspaces
 from agentcheck import screens
 from agentcheck import tracing
+from agentcheck import routes
 from agentcheck.stream import Bus, result_payload, sse_format
 from agentcheck.reliability import ReliabilityModel, annotate
 
@@ -427,49 +428,10 @@ def create_app(store: Store, default_judge: str = "typesafe",
                 "run_id": run_id, "trace_id": batch_trace_id}
 
     # ── rubric catalogue ──────────────────────────────────────────────
-
-    @app.get("/v1/checksets")
-    def list_checksets(authorization: str | None = Header(None)):
-        """Every rubric available to this process: built-in plus YAML on disk.
-
-        Authenticated on purpose: a rubric is the customer's own evaluation
-        criteria and can encode how their business is checked.
-        """
-        _authorize(authorization)
-        out = []
-        for name in check_lib.all_names():
-            try:
-                out.append(check_lib.describe(name))
-            except Exception as e:  # a broken rubric must not break the list
-                out.append({"name": name, "error": str(e)})
-        return {"checksets": out, "problems": check_lib.dsl.YAML_PROBLEMS,
-                "search_paths": [str(p) for p in yaml_dirs()]}
-
-    @app.post("/v1/checksets/reload")
-    def reload_checksets(authorization: str | None = Header(None)):
-        """Re-scan the rubric directories without restarting the server."""
-        _authorize(authorization)
-        check_lib.yaml_sets(reload=True)
-        return {"checksets": check_lib.all_names(),
-                "problems": check_lib.dsl.YAML_PROBLEMS}
+    routes.checksets.register(app, store)
 
     # ── monitoring ────────────────────────────────────────────────────
-
-    @app.get("/v1/monitor")
-    async def monitor_timeline(authorization: str | None = Header(None),
-                              bucket: str = "day", days: int = 30):
-        key = _authorize(authorization)
-        if bucket not in ("hour", "day", "week"):
-            raise HTTPException(422, "bucket must be hour, day or week")
-        if not 1 <= days <= 3650:
-            raise HTTPException(422, "days must be between 1 and 3650")
-        return mon.timeline(store, key, bucket=bucket, since_days=days)
-
-    @app.get("/v1/monitor/drift")
-    async def monitor_drift(authorization: str | None = Header(None),
-                            bucket: str = "day", days: int = 30):
-        key = _authorize(authorization)
-        return mon.drift(store, key, bucket=bucket, since_days=days)
+    routes.monitor.register(app, store)
 
     # ── workspaces, seats, invites ────────────────────────────────────
 
@@ -857,18 +819,7 @@ def create_app(store: Store, default_judge: str = "typesafe",
         ts = _trust_for(store, key, checkset, gate)
         return Response(content=trust.render_badge(ts), media_type="image/svg+xml")
 
-    @app.get("/v1/policies")
-    def list_policies(authorization: str | None = Header(None)):
-        """Policies found on disk with their lint status."""
-        _authorize(authorization)
-        found = policies.all_policies()
-        return {"policies": [
-            {"name": n, "ok": i["ok"], "error": i.get("error"),
-             "rubric": (i.get("spec") or {}).get("rubric"),
-             "rules": (i.get("spec") or {}).get("rules"),
-             "default": (i.get("spec") or {}).get("default"),
-             "path": i["path"]}
-            for n, i in sorted(found.items())]}
+    routes.policies.register(app, store)
 
     @app.get("/v1/stream")
     async def decision_stream(request: Request = None,
