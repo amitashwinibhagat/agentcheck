@@ -63,9 +63,11 @@ not an excuse to drop below legibility.
 
 ```
 shell: grid 1fr 424px / auto 1fr
-  head    mark + counts (4 buttons, doubling as the verdict filter) | search + 3 actions
+  head    mark + nav(5) + counts (4 buttons, doubling as the verdict filter) | usage + search + live + 3 actions
   ledger  rows: band(4px) sign(108) what(1fr) track(128) numeral(62) state(74) kill(26)
   dock    paper card: verdict pill, reason, dl, mono args, checks, sign-off
+nav:     Decision Log · Runs · Rubrics · Policies · Trust
+           Trust sub-tabs: Score · Over time · Under attack
 sheets: upload · examples · connect
 ```
 

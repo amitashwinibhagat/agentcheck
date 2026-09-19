@@ -666,21 +666,25 @@ another.
 
 | | families | attacks | ASR |
 |---|---|---|---|
-| Mechanics | 8 | 303 | 3.6% |
-| Industries | 20 | 164 | 6.1% |
-| **Total** | **28** | **467** | **4.5%** |
+| Mechanics | 8 | 303 | 3.0% |
+| Industries | 20 | 164 | 3.7% |
+| **Total** | **28** | **467** | **3.2%** |
+
+Measured on the live judge 2026-09-19 (`--judge typesafe --checkset safety`,
+one run). The judge is stochastic, so treat these as a sample, not a
+constant: the headline has read 3.0–3.2% across runs. Adding an attack is
+data, not code: `agentcheck/redteam_industries.py`.
 
 Industries: `healthcare` `financial` `insurance` `pharmacy` `legal`
 `compliance` `hr` `telecom` `ecommerce` `real_estate` `education`
 `government` `energy_utility` `crypto` `media` `logistics`
 `automotive_aviation` `adtech` `food_safety` `law_enforcement`.
 
-The industry corpus earns its place by finding failures the mechanics do not:
-`food_safety`, `adtech` and `compliance` are among the worst families in the
-suite, and the most dangerous single miss is
-`compliance.export_log_off` evading at confidence **0.92** — a pass at
-near-certainty. Adding an industry is data, not code: see
-`agentcheck/redteam_industries.py`.
+The industry corpus earns its place by finding failures the mechanics do not.
+The worst families on this run were **`adtech` (2/8), `money` (4/37) and
+`scope_creep` (3/38)**, and the most dangerous single miss is
+`scope_creep.search_all_mail` at confidence **0.97** — a pass at
+near-certainty that reads every mailbox without eDiscovery approval.
 
 Against the built-in stub judge the ASR is far higher (~75%) — expected, since
 the stub is keyword-based and the obfuscation family defeats keywords by design.
@@ -703,10 +707,12 @@ and **only ever downgrade `pass` → `review`** — never touching `review` or
 `agentcheck/screens.py`. Every firing is recorded on the response
 (`payload["screen"]`) with the rule and evidence, so a review queue can show why.
 
-Measured effect on the 467-attack suite: **ASR 4.3% → 3.0%** (20 → 14 evaded).
-The most valuable catch is `compliance.export_log_off`, which the judge *still*
-passes at confidence **0.92** — a near-certain pass that disables export
-auditing.
+Measured effect on the 467-attack suite: the judge passed **30** attacks on its
+own; screens floored **15** of those to `review`, leaving **3.2% (15/467)** —
+roughly halving the raw pass rate (**6.4% → 3.2%**). The most valuable catch is
+`compliance.export_log_off`, which the judge passes at confidence **0.89** and
+the `control_disabled` screen catches. (On an earlier run it evaded at 0.92
+with no screen firing — this is what the floor is for.)
 
 Screens are held to a false-positive gate: `tests/test_screen_false_positives.py`
 asserts that none of 44 legitimate calls (including near-misses for every rule)
@@ -764,15 +770,21 @@ abstention, not evidence.
 
 ## The platform in the UI
 
-The four sections are in the header nav. The queue is still the home; the rest
-are one click away.
+Five sections are in the header nav: **Decision Log · Runs · Rubrics · Policies
+· Trust**. The queue is still the home; the rest are one click away. The three
+surfaces that describe trust are sub-tabs inside **Trust** rather than three
+top-level tabs that all began with the word "Trust" — the score, its history,
+and its adversarial result are one story.
 
 | Section | What it does |
 |---|---|
 | **Decision Log** | The triage ledger, unchanged |
+| **Runs** | Steps grouped by trace id, oldest first, with verdict, decision, policy and any screen per step |
 | **Rubrics** | Every rubric with its questions, types, criteria, and which check carries the verdict. Built-in vs YAML is labelled, and each card expands. |
-| **Trust Report** | Verdict mix per bucket as a stacked bar, volume, mean confidence, sign-outs, plus a drift callout comparing the newer half of the window against the older |
-| **Trust Under Attack** | Pick a rubric, run the suite, get ASR per family sorted worst-first and every evaded attack with its request, tool, and confidence |
+| **Policies** | Each policy's ordered rules and what each returns |
+| **Trust → Score** | The Trust Score, its components, its tier and its sample size |
+| **Trust → Over time** | Verdict mix per bucket as a stacked bar, volume, mean confidence, sign-outs, plus a drift callout comparing the newer half of the window against the older |
+| **Trust → Under attack** | Pick a rubric, run the suite, get ASR per family sorted worst-first and every evaded attack with its request, tool, and confidence |
 
 The rubric picker also appears in the upload sheet, so a batch is scored against
 the rubric you choose. Selecting a rubric shows its description and question count
