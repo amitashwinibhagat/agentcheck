@@ -22,3 +22,15 @@
 		flush_interval -1
 	}
 }
+
+# The non-demo instance. SITE_ADDRESS_PROD defaults to localhost:9999 when
+# unset, so a single-instance deployment parses and simply never serves it.
+{$SITE_ADDRESS_PROD} {
+	encode zstd gzip
+
+	# The webhook lives here, not on the demo: only this instance can take
+	# money. Same SSE unbuffering as above.
+	reverse_proxy agentcheck-prod:7373 {
+		flush_interval -1
+	}
+}

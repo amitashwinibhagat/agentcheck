@@ -31,14 +31,10 @@ services:
       WORKOS_API_KEY: ${WORKOS_API_KEY:-}
       # Postgres instead of SQLite: postgresql://user:pw@host/db
       AGENTCHECK_DB_URL: ${AGENTCHECK_DB_URL:-}
-      # Billing. Opt-in via AGENTCHECK_BILLING; credentials alone never arm
-      # it, because a shared account may hold plans for another product.
-      AGENTCHECK_BILLING: ${AGENTCHECK_BILLING:-}
-      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
-      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
-      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
-      RAZORPAY_PLAN_ID_PRO: ${RAZORPAY_PLAN_ID_PRO:-}
-      RAZORPAY_PLAN_ID_TEAM: ${RAZORPAY_PLAN_ID_TEAM:-}
+      # Billing is deliberately ABSENT here. The demo hands its key to anyone
+      # via /v1/bootstrap, so arming checkout on it would let a stranger create
+      # live subscriptions on a shared payment account. It lives on
+      # agentcheck-prod only, and stays absent unless someone adds it back.
     volumes:
       # Named volume on the VM's persistent disk. Without this, every
       # rebuild starts from an empty database — the mistake we made on Fly.
@@ -57,17 +53,67 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ── the non-demo instance ──────────────────────────────────────────────
+  # Same image, opposite posture: AGENTCHECK_DEMO=0, so /v1/bootstrap is
+  # localhost-only and no key is handed to the public. This is the instance
+  # billing may be armed on: the demo's key is public, so pointing checkout at
+  # the demo would let anyone create live subscriptions on this account.
+  agentcheck-prod:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: agentcheck:gcp
+    restart: unless-stopped
+    environment:
+      AGENTCHECK_HOME: /data
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      TYPESAFE_DEFAULT_MODEL: ${TYPESAFE_DEFAULT_MODEL:-jev-latest}
+      AGENTCHECK_JUDGE_RETRIES: ${AGENTCHECK_JUDGE_RETRIES:-3}
+      # Not a demo. Customers get keys issued, not handed out.
+      AGENTCHECK_DEMO: "0"
+      AGENTCHECK_BILLING: ${AGENTCHECK_BILLING:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      RAZORPAY_PLAN_ID_PRO: ${RAZORPAY_PLAN_ID_PRO:-}
+      RAZORPAY_PLAN_ID_TEAM: ${RAZORPAY_PLAN_ID_TEAM:-}
+      AGENTCHECK_AUTH: ${AGENTCHECK_AUTH:-}
+      AGENTCHECK_SECRET: ${AGENTCHECK_SECRET:-}
+      AGENTCHECK_BASE_URL: ${AGENTCHECK_BASE_URL:-}
+      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+      AGENTCHECK_DB_URL: ${AGENTCHECK_DB_URL:-}
+    volumes:
+      - agentcheck-prod-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://127.0.0.1:7373/',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    expose:
+      - "7373"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
       - agentcheck
+      - agentcheck-prod
     ports:
       - "80:80"
       - "443:443"
     environment:
-      # The hostname Caddy serves and gets a certificate for.
+      # The hostname Caddy serves and gets a certificate for. The demo.
       SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+      # The non-demo instance. Optional: defaults to a localhost-only site so
+      # a single-instance deployment still parses. See Caddyfile.
+      SITE_ADDRESS_PROD: ${SITE_ADDRESS_PROD:-localhost:9999}
       ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
@@ -81,5 +127,6 @@ services:
 
 volumes:
   agentcheck-data:
+  agentcheck-prod-data:
   caddy-data:
   caddy-config:
