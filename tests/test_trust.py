@@ -1,11 +1,7 @@
 """Tests for the Trust Score (Build 1 of the sellability plan)."""
 
 import json
-import sys
 import unittest
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck.trust import (abstention_rate, concentration, human_agreement,
                               render_badge, stability, trust_score,

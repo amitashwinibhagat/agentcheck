@@ -2,11 +2,8 @@
 renders with the honest guards, report-card wiring, report-calibration roundtrip."""
 
 import json
-import sys
 import tempfile
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import reports as rpt  # noqa: E402
 from agentcheck.evals import datasets as ds  # noqa: E402

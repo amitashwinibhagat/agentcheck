@@ -1,10 +1,7 @@
 """Tests for deterministic screens: the external-destination floor."""
 
-import sys
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import screens
 

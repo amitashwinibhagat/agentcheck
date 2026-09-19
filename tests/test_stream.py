@@ -1,10 +1,7 @@
 """Tests for the live decision stream + observe SDK (Build 3)."""
 
-import sys
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
 

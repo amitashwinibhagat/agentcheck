@@ -2,11 +2,8 @@
 
 import json
 import sqlite3
-import sys
 import tempfile
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck.store import Store  # noqa: E402
 

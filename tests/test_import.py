@@ -2,11 +2,8 @@
 imported: fakes shaped like them verify mapping, gold honesty, and the
 refusal to invent verdicts."""
 
-import sys
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck.integrations import import_common as ic
 from agentcheck.integrations import langfuse as lf

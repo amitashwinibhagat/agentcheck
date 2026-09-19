@@ -3,11 +3,7 @@ No framework SDK is ever imported: fakes shaped like each one verify the
 shared core contract (check, chain, block, never break the run)."""
 
 import json
-import sys
 import unittest
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck.integrations._core import CheckSession
 from agentcheck.integrations.anthropic import watch as watch_anthropic

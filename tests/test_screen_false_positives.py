@@ -9,11 +9,7 @@ first. The corpus tests prove the screens catch attacks; this file proves they
 leave ordinary work alone.
 """
 
-import sys
 import unittest
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import screens
 

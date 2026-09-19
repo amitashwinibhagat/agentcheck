@@ -13,12 +13,9 @@ Two independent protections are asserted here:
   2. anything unreadable is a reported problem, not a crash
 """
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck.checks import yaml_checksets as yc
 from agentcheck import policies

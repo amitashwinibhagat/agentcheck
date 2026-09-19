@@ -6,11 +6,7 @@ Two things must stay true as industries are added:
      and legitimate calls are never floored by the deterministic screens.
 """
 
-import sys
 import unittest
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import redteam as rt
 from agentcheck.redteam_industries import INDUSTRY_SPECS

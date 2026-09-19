@@ -2,11 +2,8 @@
 LRU cache, config drift in gates, and dataset validation."""
 
 import json
-import sys
 import tempfile
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import calibration as cal  # noqa: E402
 from agentcheck import labels as labels_mod  # noqa: E402

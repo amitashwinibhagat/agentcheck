@@ -1,10 +1,7 @@
 """Tests for Decision Policies (Build 2)."""
 
-import sys
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck.policies import (Policy, PolicyError, lint, load_policy_file,
                                  simulate, policy_dirs)

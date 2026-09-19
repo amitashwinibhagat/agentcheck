@@ -5,11 +5,7 @@ engines, so multi-machine deploys stop sharing a SQLite file.
 """
 
 import os
-import sys
 import unittest
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 PGURL = os.environ.get("AGENTCHECK_TEST_PGURL", "")
 

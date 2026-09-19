@@ -12,7 +12,6 @@ claim parsing rather than a mock of them.
 
 import base64
 import json
-import sys
 import tempfile
 import threading
 import time
@@ -20,8 +19,6 @@ import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import auth
 from agentcheck.store import Store

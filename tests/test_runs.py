@@ -9,15 +9,11 @@ Two things are load-bearing here:
     after the fact. These tests pin that down.
 """
 
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from agentcheck.store import Store
-
 
 def _client():
     from fastapi.testclient import TestClient

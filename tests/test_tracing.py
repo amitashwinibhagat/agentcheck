@@ -2,14 +2,11 @@
 it as optional (every helper is a no-op without it)."""
 
 import json
-import sys
 import tempfile
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import tracing
 

@@ -1,11 +1,8 @@
 """RAG metrics, red-team corpus, eval matrix, gates, datasets, monitoring."""
 
 import json
-import sys
 import tempfile
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import metrics as M  # noqa: E402
 from agentcheck import monitor as mon  # noqa: E402

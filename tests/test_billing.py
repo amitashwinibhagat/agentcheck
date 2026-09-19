@@ -9,12 +9,9 @@ import hashlib
 import hmac
 import json
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import billing
 from agentcheck.store import Store

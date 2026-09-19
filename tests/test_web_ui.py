@@ -13,7 +13,6 @@ have caught either bug — the path is the browser.
 """
 
 import socket
-import sys
 import tempfile
 import threading
 import time
@@ -21,7 +20,6 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 pytest.importorskip("playwright.sync_api", reason="playwright not installed")
 

@@ -1,11 +1,8 @@
 """Rubric files, calibration, and independent labeling."""
 
 import json
-import sys
 import tempfile
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import calibration as cal  # noqa: E402
 from agentcheck import checks as check_lib  # noqa: E402

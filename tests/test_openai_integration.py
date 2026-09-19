@@ -3,13 +3,10 @@ fakes shaped like chat.completions responses verify the interception, and a
 tiny HTTP stub verifies the server path."""
 
 import json
-import sys
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck.integrations.openai import (
     AgentCheckBlocked, _last_user_text, watch)

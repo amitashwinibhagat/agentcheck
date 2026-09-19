@@ -9,13 +9,10 @@ The properties that matter:
 """
 
 import os
-import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck import auth, workspaces
 from agentcheck.store import Store
