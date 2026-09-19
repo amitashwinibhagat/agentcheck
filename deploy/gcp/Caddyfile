@@ -10,23 +10,32 @@
 	email {$ACME_EMAIL}
 }
 
-{$SITE_ADDRESS} {
+# Shared proxy options. Both sites stream Server-Sent Events, and
+# flush_interval -1 disables the response buffering that would otherwise
+# deliver live events in clumps or not at all. If this is ever edited on one
+# upstream and not the other, streaming breaks on exactly one instance — so it
+# lives here, once. (Logs go to stdout on purpose: Caddy's /data volume holds
+# certificates, and an access log written there would grow it forever. Docker's
+# log rotation bounds it instead.)
+(common) {
 	encode zstd gzip
+}
 
-	# flush_interval -1 disables response buffering. /v1/stream is Server-Sent
-	# Events; with buffering on, live events arrive in clumps or not at all.
-	# Logs go to stdout on purpose: Caddy's /data volume holds certificates,
-	# and an access log written there would grow it forever. Docker's log
-	# rotation (see docker-compose.yml) bounds it instead.
-	reverse_proxy agentcheck:7373 {
+(proxy-upstream) {
+	reverse_proxy {args.0}:7373 {
 		flush_interval -1
 	}
+}
+
+{$SITE_ADDRESS} {
+	import common
+	import proxy-upstream agentcheck
 }
 
 # The non-demo instance. SITE_ADDRESS_PROD defaults to localhost:9999 when
 # unset, so a single-instance deployment parses and simply never serves it.
 {$SITE_ADDRESS_PROD} {
-	encode zstd gzip
+	import common
 
 	# The distribution wheel, installable by URL. Until PyPI is unblocked
 	# (Actions billing) this is how a stranger gets the product:
@@ -37,8 +46,6 @@
 	}
 
 	# The webhook lives here, not on the demo: only this instance can take
-	# money. Same SSE unbuffering as above.
-	reverse_proxy agentcheck-prod:7373 {
-		flush_interval -1
-	}
+	# money.
+	import proxy-upstream agentcheck-prod
 }

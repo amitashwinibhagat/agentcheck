@@ -8,29 +8,46 @@
 # published on a host port — only Caddy is, so the app is never reachable
 # over plaintext HTTP from outside.
 
+# Shared service shape. Both app instances build the same image and agree on
+# everything except posture (demo flag, billing) and storage. If a line needs
+# to differ between demo and prod, it lives on the service, not here — that
+# is what keeps the billing-absent guarantee reviewable.
+x-app: &app
+  build:
+    context: ../..
+    dockerfile: Dockerfile
+  image: agentcheck:gcp
+  restart: unless-stopped
+  expose:
+    - "7373"
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-app-env: &app-env
+  AGENTCHECK_HOME: /data
+  # Judge. Omit the key to fall back to the offline stub judge.
+  TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+  TYPESAFE_DEFAULT_MODEL: ${TYPESAFE_DEFAULT_MODEL:-jev-latest}
+  AGENTCHECK_JUDGE_RETRIES: ${AGENTCHECK_JUDGE_RETRIES:-3}
+  # Set these together to turn on sign-in (see README, "Sign-in").
+  AGENTCHECK_AUTH: ${AGENTCHECK_AUTH:-}
+  AGENTCHECK_SECRET: ${AGENTCHECK_SECRET:-}
+  AGENTCHECK_BASE_URL: ${AGENTCHECK_BASE_URL:-}
+  WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+  WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+  # Postgres instead of SQLite: postgresql://user:pw@host/db
+  AGENTCHECK_DB_URL: ${AGENTCHECK_DB_URL:-}
+
 services:
   agentcheck:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-    image: agentcheck:gcp
-    restart: unless-stopped
+    <<: *app
     environment:
-      AGENTCHECK_HOME: /data
-      # Judge. Omit the key to fall back to the offline stub judge.
-      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
-      TYPESAFE_DEFAULT_MODEL: ${TYPESAFE_DEFAULT_MODEL:-jev-latest}
-      AGENTCHECK_JUDGE_RETRIES: ${AGENTCHECK_JUDGE_RETRIES:-3}
+      <<: *app-env
       # 1 for a hosted prospect demo: hands out a capped key from any origin.
       AGENTCHECK_DEMO: ${AGENTCHECK_DEMO:-1}
-      # Set these together to turn on sign-in (see README, "Sign-in").
-      AGENTCHECK_AUTH: ${AGENTCHECK_AUTH:-}
-      AGENTCHECK_SECRET: ${AGENTCHECK_SECRET:-}
-      AGENTCHECK_BASE_URL: ${AGENTCHECK_BASE_URL:-}
-      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
-      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
-      # Postgres instead of SQLite: postgresql://user:pw@host/db
-      AGENTCHECK_DB_URL: ${AGENTCHECK_DB_URL:-}
       # Billing is deliberately ABSENT here. The demo hands its key to anyone
       # via /v1/bootstrap, so arming checkout on it would let a stranger create
       # live subscriptions on a shared payment account. It lives on
@@ -59,16 +76,9 @@ services:
   # billing may be armed on: the demo's key is public, so pointing checkout at
   # the demo would let anyone create live subscriptions on this account.
   agentcheck-prod:
-    build:
-      context: ../..
-      dockerfile: Dockerfile
-    image: agentcheck:gcp
-    restart: unless-stopped
+    <<: *app
     environment:
-      AGENTCHECK_HOME: /data
-      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
-      TYPESAFE_DEFAULT_MODEL: ${TYPESAFE_DEFAULT_MODEL:-jev-latest}
-      AGENTCHECK_JUDGE_RETRIES: ${AGENTCHECK_JUDGE_RETRIES:-3}
+      <<: *app-env
       # Not a demo. Customers get keys issued, not handed out.
       AGENTCHECK_DEMO: "0"
       AGENTCHECK_BILLING: ${AGENTCHECK_BILLING:-}
@@ -77,12 +87,6 @@ services:
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
       RAZORPAY_PLAN_ID_PRO: ${RAZORPAY_PLAN_ID_PRO:-}
       RAZORPAY_PLAN_ID_TEAM: ${RAZORPAY_PLAN_ID_TEAM:-}
-      AGENTCHECK_AUTH: ${AGENTCHECK_AUTH:-}
-      AGENTCHECK_SECRET: ${AGENTCHECK_SECRET:-}
-      AGENTCHECK_BASE_URL: ${AGENTCHECK_BASE_URL:-}
-      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
-      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
-      AGENTCHECK_DB_URL: ${AGENTCHECK_DB_URL:-}
     volumes:
       - agentcheck-prod-data:/data
     healthcheck:
@@ -91,13 +95,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-    expose:
-      - "7373"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
 
   caddy:
     image: caddy:2-alpine
