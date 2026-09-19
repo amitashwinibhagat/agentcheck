@@ -847,16 +847,20 @@ quietly producing a number nobody questions:
 > command and points at a GitHub repository that does not exist. Installing it
 > gets you that tool, not this one.
 >
-> **This distribution publishes as `agentcheck-verify`.** Until the first
-> PyPI release, two paths work today:
+> **This distribution publishes as `agentcheck-verify`.** Two paths work
+> today:
 >
 > ```bash
-> # container — no checkout, no Python
-> docker run --rm -p 7373:7373 ghcr.io/amitashwinibhagat/agentcheck
+> # install from the published wheel — no checkout needed
+> pip install https://app.35-253-233-192.sslip.io/wheels/agentcheck_verify-0.1.0-py3-none-any.whl
 >
 > # or from a checkout of this repository
 > pip install -e .
 > ```
+>
+> The container image is wired to GHCR but has not published yet — GitHub
+> Actions is blocked on billing on this account (see AGENTS.md). Until that is
+> fixed, the wheel above is the install path.
 
 For a hosted prospect demo see [docs/HOSTING.md](docs/HOSTING.md) —
 ranked free options, demo mode, and the demo-day checklist.

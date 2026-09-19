@@ -28,6 +28,14 @@
 {$SITE_ADDRESS_PROD} {
 	encode zstd gzip
 
+	# The distribution wheel, installable by URL. Until PyPI is unblocked
+	# (Actions billing) this is how a stranger gets the product:
+	#   pip install https://<host>/wheels/<wheel>.whl
+	handle_path /wheels/* {
+		root * /srv/dist
+		file_server
+	}
+
 	# The webhook lives here, not on the demo: only this instance can take
 	# money. Same SSE unbuffering as above.
 	reverse_proxy agentcheck-prod:7373 {

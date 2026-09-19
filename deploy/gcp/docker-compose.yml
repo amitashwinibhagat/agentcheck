@@ -119,6 +119,10 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+      # The wheel we publish until PyPI is unblocked. Actions is currently
+      # dead on this account (billing), so this is the distribution path that
+      # works today; drop the file in and it is installable by URL.
+      - agentcheck-dist:/srv/dist:ro
     logging:
       driver: json-file
       options:
@@ -130,3 +134,4 @@ volumes:
   agentcheck-prod-data:
   caddy-data:
   caddy-config:
+  agentcheck-dist:

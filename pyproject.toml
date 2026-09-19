@@ -7,6 +7,7 @@
 name = "agentcheck-verify"
 version = "0.1.0"
 description = "Calibrated verification for agent tool calls. Proxy + meter + eval harness."
+readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
