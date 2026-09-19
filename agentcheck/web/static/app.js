@@ -4,17 +4,9 @@
 import { $, banner, esc, when, checkValue, verdictReason, checkRows,
          chipArea, collisionMessage, VERDICT, ASSESS, CHECK_COPY, GATE,
          TRUST_COLORS, DECISION_COLORS } from "./util.js";
+import { state } from "./state.js";
+import { api } from "./api.js";
 
-let key = "";
-let results = [];
-let counts = { pass: 0, review: 0, fail: 0, total: 0 };
-let selected = null;
-let filter = "all";
-let search = "";
-let examples = [];
-let checksets = [];
-let bucket = "day";
-let rtCheckset = "safety";
 
 const SUBTITLE = {
   queue: "the decision log",
@@ -28,10 +20,9 @@ const SUBTITLE = {
 // beginning with "Trust" made the product's central concept the hardest thing
 // to find; the score, its history, and its adversarial result are one story.
 const TRUST_TABS = ["score", "report", "attack"];
-let trustTab = "score";
 
 function setTrustTab(name) {
-  trustTab = name;
+  state.trustTab = name;
   TRUST_TABS.forEach((t) => { $("trust-panel-" + t).hidden = t !== name; });
   document.querySelectorAll("[data-trusttab]").forEach((b) =>
     b.setAttribute("aria-pressed", String(b.dataset.trusttab === name)));
@@ -58,23 +49,7 @@ function setView(name) {
   if (name === "rubrics") loadRubrics();
   if (name === "runs") loadRuns();
   if (name === "policies") loadPolicies();
-  if (name === "trust") setTrustTab(trustTab);
-}
-
-
-async function api(path, opts = {}) {
-  const headers = { Authorization: `Bearer ${key}`, ...(opts.headers || {}) };
-  if (opts.body) headers["Content-Type"] = "application/json";
-  const res = await fetch(path, { ...opts, headers });
-  if (res.status === 204) return null;
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const d = data.detail || res.statusText;
-    const e = new Error(typeof d === "string" ? d : JSON.stringify(d));
-    e.status = res.status;
-    throw e;
-  }
-  return data;
+  if (name === "trust") setTrustTab(state.trustTab);
 }
 
 
@@ -84,19 +59,19 @@ async function api(path, opts = {}) {
 /* ── ledger ───────────────────────────────────────────────────────── */
 
 function visible() {
-  const q = search.trim().toLowerCase();
-  return results.filter((r) => {
-    if (filter !== "all" && r.trace_verdict !== filter) return false;
+  const q = state.search.trim().toLowerCase();
+  return state.results.filter((r) => {
+    if (state.filter !== "all" && r.trace_verdict !== state.filter) return false;
     if (!q) return true;
     return `${r.request} ${r.tool} ${JSON.stringify(r.args)}`.toLowerCase().includes(q);
   });
 }
 
 function renderCounts() {
-  $("c-total").textContent = counts.total ?? 0;
-  $("c-fail").textContent = counts.fail ?? 0;
-  $("c-review").textContent = counts.review ?? 0;
-  $("c-pass").textContent = counts.pass ?? 0;
+  $("c-total").textContent = state.counts.total ?? 0;
+  $("c-fail").textContent = state.counts.fail ?? 0;
+  $("c-review").textContent = state.counts.review ?? 0;
+  $("c-pass").textContent = state.counts.pass ?? 0;
 }
 
 // What the user's own sign-outs have added up to. Reviewing used to change
@@ -104,7 +79,7 @@ function renderCounts() {
 // the same human-agreement number the Trust view computes, shown where the
 // reviewing happens.
 function signoffStats() {
-  const assessed = results.filter((r) => r.assessment);
+  const assessed = state.results.filter((r) => r.assessment);
   const agreed = assessed.filter((r) => r.assessment === "looks_correct").length;
   const missed = assessed.filter((r) => r.assessment === "actual_issue").length;
   return { assessed: assessed.length, agreed, missed, decided: agreed + missed };
@@ -112,10 +87,10 @@ function signoffStats() {
 
 function renderLedger() {
   const box = $("rows");
-  if (!counts.total) {
+  if (!state.counts.total) {
     $("hintline").textContent = "";
-    const signed = (counts.assessed ?? 0) > 0;
-    const batched = (counts.batches ?? 0) > 0;
+    const signed = (state.counts.assessed ?? 0) > 0;
+    const batched = (state.counts.batches ?? 0) > 0;
     box.innerHTML = `
       <div class="empty">
         <h2>No calls checked yet</h2>
@@ -138,13 +113,13 @@ function renderLedger() {
     ? ` · ${s.assessed} signed out`
       + (s.decided ? `, judge agreed on ${Math.round((s.agreed / s.decided) * 100)}%` : "")
     : "";
-  $("hintline").textContent = (rows.length === results.length
-    ? `${results.length} checked call${results.length === 1 ? "" : "s"} · newest first`
-    : `${rows.length} of ${results.length} shown`) + tail;
+  $("hintline").textContent = (rows.length === state.results.length
+    ? `${state.results.length} checked call${state.results.length === 1 ? "" : "s"} · newest first`
+    : `${rows.length} of ${state.results.length} shown`) + tail;
   if (!rows.length) {
     box.innerHTML = `<div class="empty"><p>Nothing matches that filter. <button type="button" class="btn ghost" data-clear>Clear filters</button></p></div>`;
     box.querySelector("[data-clear]").addEventListener("click", () => {
-      filter = "all"; search = ""; $("search").value = "";
+      state.filter = "all"; state.search = ""; $("search").value = "";
       document.querySelectorAll(".count").forEach((c) => c.classList.toggle("on", c.dataset.filter === "all"));
       renderLedger();
     });
@@ -164,7 +139,7 @@ function renderLedger() {
     ].filter(Boolean).join(" · ");
     return `
       <button type="button" class="row" data-id="${r.id}" data-v="${r.trace_verdict || "review"}"
-              aria-selected="${selected?.id === r.id}">
+              aria-selected="${state.selected?.id === r.id}">
         <span class="band" aria-hidden="true"></span>
         <span class="sign">${esc(r.tool)}<i>${esc(chipArea(r))}</i></span>
         <span class="what"><b>${esc(r.request)}</b><small>${esc(meta)}</small></span>
@@ -181,7 +156,7 @@ function renderLedger() {
 
 function renderDock() {
   const box = $("dock-in");
-  if (!selected) {
+  if (!state.selected) {
     box.innerHTML = `<div class="empty-dock">
       <p class="kicker" style="margin-bottom:10px">Nothing in hand</p>
       <p>Select a call from the ledger to read its checks and sign it out.<br><br>
@@ -189,7 +164,7 @@ function renderDock() {
     </div>`;
     return;
   }
-  const r = selected;
+  const r = state.selected;
   const v = r.trace_verdict || "review";
   const meta = VERDICT[v] || VERDICT.review;
   const conf = r.confidence == null ? null : Number(r.confidence);
@@ -237,23 +212,22 @@ function renderDock() {
   if (r.trace_id) loadRunStrip(r.trace_id, r.id);
 }
 
-const runCache = {};
 async function loadRunStrip(traceId, currentId) {
   const slot = document.getElementById("runstrip");
   if (!slot) return;
   try {
-    if (!runCache[traceId]) {
+    if (!state.runCache[traceId]) {
       const d = await api(`/v1/traces/${encodeURIComponent(traceId)}`);
-      runCache[traceId] = d.steps || [];
+      state.runCache[traceId] = d.steps || [];
     }
-    const steps = runCache[traceId];
+    const steps = state.runCache[traceId];
     if (!steps.length) { slot.innerHTML = ""; return; }
     slot.innerHTML = `<p class="kicker">Run · ${steps.length} step${steps.length === 1 ? "" : "s"} oldest first</p>
       <div class="runstrip">${steps.map((s, i) =>
         `<button type="button" class="rdot v-${s.trace_verdict || "review"}${s.id === currentId ? " here" : ""}" data-step="${s.id}" title="${i + 1} · ${esc(s.tool)} · ${s.trace_verdict || "review"}">${i + 1}</button>`).join("")}</div>`;
     slot.querySelectorAll("[data-step]").forEach((b) => b.addEventListener("click", () => {
-      const found = results.find((x) => x.id === b.dataset.step);
-      if (found) { selected = found; renderLedger(); renderDock(); }
+      const found = state.results.find((x) => x.id === b.dataset.step);
+      if (found) { state.selected = found; renderLedger(); renderDock(); }
     }));
   } catch (e) { /* unknown trace or offline: the dock still stands */ slot.innerHTML = ""; }
 }
@@ -261,9 +235,9 @@ async function loadRunStrip(traceId, currentId) {
 async function assess(id, assessment) {
   try {
     await api(`/v1/results/${id}`, { method: "PATCH", body: JSON.stringify({ assessment }) });
-    const row = results.find((x) => x.id === id);
+    const row = state.results.find((x) => x.id === id);
     if (row) row.assessment = assessment;
-    if (selected?.id === id) selected.assessment = assessment;
+    if (state.selected?.id === id) state.selected.assessment = assessment;
     renderDock(); renderLedger();
   } catch (e) { banner("Could not save your assessment: " + e.message); }
 }
@@ -291,31 +265,31 @@ async function loadUsage() {
 async function loadChecksets() {
   try {
     const d = await api("/v1/checksets");
-    checksets = d.checksets || [];
+    state.checksets = d.checksets || [];
     for (const sel of [$("upload-checkset"), $("rt-checkset")]) {
       const keep = sel.value;
-      sel.innerHTML = checksets.map((c) =>
+      sel.innerHTML = state.checksets.map((c) =>
         `<option value="${esc(c.name)}">${esc(c.name)}` +
         `${c.builtin ? " (built-in)" : ""} · ${(c.checks || []).length} checks</option>`)
         .join("");
-      if (keep && checksets.some((c) => c.name === keep)) sel.value = keep;
+      if (keep && state.checksets.some((c) => c.name === keep)) sel.value = keep;
     }
     // Trust reads across all rubrics by default; a specific rubric narrows it.
     const tsel = $("trust-checkset");
     const tkeep = tsel.value;
-    tsel.innerHTML = `<option value="">all rubrics</option>` + checksets.map((c) =>
+    tsel.innerHTML = `<option value="">all rubrics</option>` + state.checksets.map((c) =>
       `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join("");
-    if (tkeep && (!tkeep || checksets.some((c) => c.name === tkeep))) tsel.value = tkeep;
-    rtCheckset = $("rt-checkset").value || "safety";
+    if (tkeep && (!tkeep || state.checksets.some((c) => c.name === tkeep))) tsel.value = tkeep;
+    state.rtCheckset = $("rt-checkset").value || "safety";
     await loadRedteamFamilies();
     updateRubricHint();
     updateRedteamCost();
   } catch {
-    checksets = [];
+    state.checksets = [];
   }
 }
 
-const currentRubric = (name) => checksets.find((c) => c.name === name) || null;
+const currentRubric = (name) => state.checksets.find((c) => c.name === name) || null;
 
 function updateRubricHint() {
   const c = currentRubric($("upload-checkset").value);
@@ -326,13 +300,13 @@ function updateRubricHint() {
 }
 
 async function loadRubrics() {
-  if (!checksets.length) await loadChecksets();
+  if (!state.checksets.length) await loadChecksets();
   const box = $("rubric-list");
-  if (!checksets.length) {
+  if (!state.checksets.length) {
     box.innerHTML = `<p class="hint" style="padding:0 var(--gut)">No rubrics available.</p>`;
     return;
   }
-  box.innerHTML = `<div style="padding:14px var(--gut) 40px">` + checksets.map((c) => {
+  box.innerHTML = `<div style="padding:14px var(--gut) 40px">` + state.checksets.map((c) => {
     const crit = (q) => !q.criteria ? ""
       : Array.isArray(q.criteria) ? q.criteria.join(" < ")
       : Object.entries(q.criteria).map(([k, v]) => `${k}: ${v}`).join(" · ");
@@ -471,7 +445,7 @@ async function loadMonitor() {
   box.innerHTML = `<p class="hint" style="padding:0 var(--gut)">Loading…</p>`;
   let tl;
   try {
-    tl = await api(`/v1/monitor?bucket=${bucket}&days=90`);
+    tl = await api(`/v1/monitor?bucket=${state.bucket}&days=90`);
   } catch (e) {
     box.innerHTML = `<p class="hint danger" style="padding:0 var(--gut)">${esc(e.message)}</p>`;
     return;
@@ -497,7 +471,7 @@ async function loadMonitor() {
     </div>`;
   }).join("");
   box.innerHTML = `<div style="padding:18px var(--gut) 40px">
-    <p class="hint">${tl.total} judgments across ${tl.buckets.length} ${esc(bucket)} buckets</p>
+    <p class="hint">${tl.total} judgments across ${tl.buckets.length} ${esc(state.bucket)} buckets</p>
     <div class="bars">
       <div class="bar-row head"><span>bucket</span><span>mix</span><span>n</span>
         <span>flagged</span><span>conf</span><span>signed out</span></div>
@@ -515,7 +489,7 @@ async function loadDrift() {
   box.innerHTML = `<p class="hint">Comparing…</p>`;
   let d;
   try {
-    d = await api(`/v1/monitor/drift?bucket=${bucket}&days=90`);
+    d = await api(`/v1/monitor/drift?bucket=${state.bucket}&days=90`);
   } catch (e) {
     box.innerHTML = `<p class="hint danger">${esc(e.message)}</p>`;
     return;
@@ -538,18 +512,15 @@ async function loadDrift() {
 
 /* ── runs (trace explorer) ────────────────────────────────────────── */
 
-let runFilter = "all";
-let selectedRun = null;
-let lastRuns = { runs: [] };
 async function loadRuns() {
   const box = $("run-list");
   if (!box) return;
   try {
-    const d = await api("/v1/runs" + (runFilter === "all" ? "" : `?only=${runFilter}`));
-    lastRuns = d;
+    const d = await api("/v1/runs" + (state.runFilter === "all" ? "" : `?only=${state.runFilter}`));
+    state.lastRuns = d;
     renderRuns(d);
-    if (!selectedRun || !(d.runs || []).some((r) => r.trace_id === selectedRun)) {
-      selectedRun = null;
+    if (!state.selectedRun || !(d.runs || []).some((r) => r.trace_id === state.selectedRun)) {
+      state.selectedRun = null;
       $("run-detail").innerHTML =
         `<div class="empty-dock"><p class="kicker" style="margin-bottom:10px">Steps</p>
          <p>Select a run to see its steps, in order, with the verdict, confidence,
@@ -581,7 +552,7 @@ function renderRuns(d) {
     const path = uniq.slice(0, 3).join(" → ") + (uniq.length > 3 ? ` +${uniq.length - 3}` : "");
     const state = r.blocked ? "blocked" : (r.review ? "review" : "clear");
     return `<button type="button" class="row runrow" data-run="${esc(r.trace_id)}"
-        aria-selected="${selectedRun === r.trace_id}">
+        aria-selected="${state.selectedRun === r.trace_id}">
       <span class="band ${r.blocked ? "flag" : (r.review ? "rev" : "")}" aria-hidden="true"></span>
       <span class="sign">${r.step_count}<i>step${r.step_count === 1 ? "" : "s"}</i></span>
       <span class="what"><b>${esc(path)}</b>
@@ -592,8 +563,8 @@ function renderRuns(d) {
 }
 
 async function openRun(traceId) {
-  selectedRun = traceId;
-  renderRuns(lastRuns);
+  state.selectedRun = traceId;
+  renderRuns(state.lastRuns);
   const det = $("run-detail");
   det.innerHTML = `<p class="hint" style="padding:12px">Loading…</p>`;
   try {
@@ -662,7 +633,7 @@ async function loadRedteamFamilies() {
 }
 
 function updateRedteamCost() {
-  const c = currentRubric($("rt-checkset").value) || currentRubric(rtCheckset);
+  const c = currentRubric($("rt-checkset").value) || currentRubric(state.rtCheckset);
   if (!c) { $("rt-cost").textContent = ""; return; }
   const sel = $("rt-families");
   const picked = sel && sel.value ? sel.value.split(",") : rtCorpus.families;
@@ -736,52 +707,50 @@ function renderRedteam(d) {
 
 /* ── queue loading ────────────────────────────────────────────────── */
 
-let liveSource = null;
-let liveOn = false;
 
 function setLive(on) {
-  liveOn = on;
+  state.liveOn = on;
   const btn = $("live-toggle");
   if (btn) {
     btn.classList.toggle("on", on);
     btn.setAttribute("aria-pressed", String(on));
     btn.textContent = on ? "Live" : "Live off";
   }
-  if (on && !liveSource) {
-    liveSource = new EventSource(`/v1/stream?key=${encodeURIComponent(key)}`);
-    liveSource.addEventListener("result", (ev) => {
+  if (on && !state.liveSource) {
+    state.liveSource = new EventSource(`/v1/stream?key=${encodeURIComponent(state.key)}`);
+    state.liveSource.addEventListener("result", (ev) => {
       try {
         const m = JSON.parse(ev.data);
-        if (!m.id || results.some((r) => r.id === m.id)) return;
-        results.unshift({ id: m.id, ts: m.ts * 1000, request: m.request,
+        if (!m.id || state.results.some((r) => r.id === m.id)) return;
+        state.results.unshift({ id: m.id, ts: m.ts * 1000, request: m.request,
           tool: m.tool, args: {}, trace_verdict: m.verdict,
           confidence: m.confidence, severity: m.severity,
           decision: m.decision, checkset: m.checkset,
           assessment: null, duplicate: m.duplicate });
-        counts.total += 1;
-        if (m.verdict in counts) counts[m.verdict] += 1;
+        state.counts.total += 1;
+        if (m.verdict in state.counts) state.counts[m.verdict] += 1;
         renderCounts(); renderLedger();
       } catch { /* a malformed event must not break the stream */ }
     });
-    liveSource.onerror = () => { /* EventSource auto-reconnects */ };
-  } else if (!on && liveSource) {
-    liveSource.close();
-    liveSource = null;
+    state.liveSource.onerror = () => { /* EventSource auto-reconnects */ };
+  } else if (!on && state.liveSource) {
+    state.liveSource.close();
+    state.liveSource = null;
   }
 }
 
 async function load() {
   try {
     const data = await api("/v1/results");
-    results = data.results || [];
-    counts = data.counts || { pass: 0, review: 0, fail: 0, total: 0 };
+    state.results = data.results || [];
+    state.counts = data.counts || { pass: 0, review: 0, fail: 0, total: 0 };
     banner("");
   } catch (e) {
     if (e.status === 401) {
       // The key this tab holds is no longer valid: drop it and re-gate rather
       // than leaving a half-loaded queue on screen.
       sessionStorage.removeItem(KEY_STORE);
-      key = "";
+      state.key = "";
       gateForKey("That key was not recognised. Paste a valid one.");
       return;
     }
@@ -793,7 +762,7 @@ async function load() {
   // which left its "select a call" prompt unreachable and the 424px panel
   // rendering blank on first load — reading as a broken page rather than an
   // empty one.
-  selected = selected ? (results.find((r) => r.id === selected.id) || null) : null;
+  state.selected = state.selected ? (state.results.find((r) => r.id === state.selected.id) || null) : null;
   renderDock();
 }
 
@@ -810,7 +779,7 @@ function closeSheets() { document.querySelectorAll(".sheet").forEach((s) => (s.h
 /* examples */
 function renderExamples() {
   const q = $("ex-search").value.trim().toLowerCase();
-  const rows = examples.filter((e) =>
+  const rows = state.examples.filter((e) =>
     !q || `${e.title} ${e.blurb} ${e.domain} ${e.tool} ${e.request}`.toLowerCase().includes(q));
   $("ex-cards").innerHTML = rows.length ? rows.map((e) => `
     <button type="button" class="card" data-v="${e.expect}" data-ex="${e.id}">
@@ -821,7 +790,7 @@ function renderExamples() {
 }
 
 async function runExample(id) {
-  const e = examples.find((x) => x.id === id);
+  const e = state.examples.find((x) => x.id === id);
   if (!e) return;
   closeSheets();
   try {
@@ -830,7 +799,7 @@ async function runExample(id) {
       body: JSON.stringify({ trace: { request: e.request, tool: e.tool, args: e.args } }),
     });
     await load();
-    selected = results.find((x) => x.id === r.id) || r;
+    state.selected = state.results.find((x) => x.id === r.id) || r;
     renderLedger(); renderDock();
     $("dock").classList.add("open");
     banner(r.duplicate ? "Identical to a call already in your queue — showing the earlier result." : "", "info");
@@ -905,7 +874,7 @@ async function runUpload() {
       </table>`;
     await load();
     $("dock").classList.add("open");
-    if (out.results[0]?.id) { selected = results.find((x) => x.id === out.results[0].id) || null; renderDock(); }
+    if (out.results[0]?.id) { state.selected = state.results.find((x) => x.id === out.results[0].id) || null; renderDock(); }
   } catch (e) {
     const msg = collisionMessage(e);
     if (msg) banner(msg);
@@ -921,7 +890,7 @@ document.querySelectorAll("#nav button").forEach((b) =>
 document.querySelectorAll("[data-trusttab]").forEach((b) =>
   b.addEventListener("click", () => setTrustTab(b.dataset.trusttab)));
 document.querySelectorAll("[data-bucket]").forEach((b) => b.addEventListener("click", () => {
-  bucket = b.dataset.bucket;
+  state.bucket = b.dataset.bucket;
   // aria-pressed, not a bare `.on` class: the active-segment style keys on it,
   // and the class-only version left the selected bucket visually unselected.
   document.querySelectorAll("[data-bucket]").forEach((x) =>
@@ -932,7 +901,7 @@ $("run-drift").addEventListener("click", loadDrift);
 $("runs-refresh").addEventListener("click", loadRuns);
 document.querySelectorAll("[data-runfilter]").forEach((b) =>
   b.addEventListener("click", () => {
-    runFilter = b.dataset.runfilter;
+    state.runFilter = b.dataset.runfilter;
     document.querySelectorAll("[data-runfilter]").forEach((x) =>
       x.classList.toggle("on", x === b));
     loadRuns();
@@ -946,30 +915,30 @@ $("rt-checkset").addEventListener("change", updateRedteamCost);
 $("rt-families").addEventListener("change", updateRedteamCost);
 $("trust-refresh").addEventListener("click", loadTrust);
 $("trust-checkset").addEventListener("change", loadTrust);
-$("live-toggle").addEventListener("click", () => setLive(!liveOn));
+$("live-toggle").addEventListener("click", () => setLive(!state.liveOn));
 $("upload-checkset").addEventListener("change", updateRubricHint);
 
 document.querySelectorAll(".count").forEach((b) => b.addEventListener("click", () => {
   const f = b.dataset.filter;
-  filter = filter === f && f !== "all" ? "all" : f;
-  document.querySelectorAll(".count").forEach((c) => c.classList.toggle("on", c.dataset.filter === filter));
+  state.filter = state.filter === f && f !== "all" ? "all" : f;
+  document.querySelectorAll(".count").forEach((c) => c.classList.toggle("on", c.dataset.filter === state.filter));
   renderLedger();
 }));
-$("search").addEventListener("input", (e) => { search = e.target.value; renderLedger(); });
+$("search").addEventListener("input", (e) => { state.search = e.target.value; renderLedger(); });
 $("rows").addEventListener("click", async (ev) => {
   const kill = ev.target.closest("[data-kill]");
   if (kill) {
     ev.stopPropagation();
     try {
       await api(`/v1/results/${kill.dataset.kill}`, { method: "DELETE" });
-      if (selected?.id === kill.dataset.kill) selected = null;
+      if (state.selected?.id === kill.dataset.kill) state.selected = null;
       await load(); renderDock();
     } catch (e) { banner("Could not delete: " + e.message); }
     return;
   }
   const row = ev.target.closest(".row");
   if (!row) return;
-  selected = results.find((r) => r.id === row.dataset.id) || null;
+  state.selected = state.results.find((r) => r.id === row.dataset.id) || null;
   renderLedger(); renderDock();
   $("dock").classList.add("open");
 });
@@ -1007,10 +976,10 @@ function gateForKey(why) {
 }
 
 async function boot() {
-  key = sessionStorage.getItem(KEY_STORE) || "";
-  if (!key) {
+  state.key = sessionStorage.getItem(KEY_STORE) || "";
+  if (!state.key) {
     try {
-      key = (await api("/v1/bootstrap")).key;
+      state.key = (await api("/v1/bootstrap")).key;
     } catch {
       gateForKey();
       $("rows").innerHTML = `<div class="empty">
@@ -1024,7 +993,7 @@ async function boot() {
     }
   }
   try {
-    examples = await fetch("/assets/examples.json").then((r) => r.json());
+    state.examples = await fetch("/assets/examples.json").then((r) => r.json());
   } catch { /* examples are a door, not the product; the queue still loads */ }
   renderExamples();
   await loadChecksets();
@@ -1033,14 +1002,14 @@ async function boot() {
   const ORIGIN = location.origin;
   $("snippet").textContent =
 `curl ${ORIGIN}/v1/check \\
-  -H "Authorization: Bearer ${key}" \\
+  -H "Authorization: Bearer ${state.key}" \\
   -H "Content-Type: application/json" \\
   -d '{"trace":{"request":"Summarize my unread inbox",
               "tool":"search_inbox",
               "args":{"query":"unread"}}}'`;
   $("snippet-batch").textContent =
 `curl ${ORIGIN}/v1/check-batch \\
-  -H "Authorization: Bearer ${key}" \\
+  -H "Authorization: Bearer ${state.key}" \\
   -H "Content-Type: application/json" \\
   -d '{"traces":[{"request":"…","tool":"…","args":{}}]}'`;
   await load();
@@ -1051,12 +1020,12 @@ async function useKey() {
   if (!v) { $("key-status").textContent = "Paste the key you were issued."; return; }
   // Verify before closing: a rejected key should say so here, not later as an
   // empty queue that looks like a bug.
-  const prev = key;
-  key = v;
+  const prev = state.key;
+  state.key = v;
   try {
     await api("/v1/results");
   } catch (e) {
-    key = prev;
+    state.key = prev;
     $("key-status").textContent = e.status === 401
       ? "That key was not recognised." : "Could not reach the workspace.";
     return;
