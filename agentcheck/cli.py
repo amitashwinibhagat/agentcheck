@@ -87,8 +87,26 @@ def cli() -> None:
     """Calibrated verification for agent tool calls."""
 
 
+def _data_dir_opt(f):
+    """Every store-touching command takes --data-dir the same way."""
+    return click.option("--data-dir", default=None,
+                         help="where to keep the sqlite store")(f)
+
+
+def _judge_opt(f):
+    """The default-judge spelling. Commands that mean something else by
+    --judge (server default, labeler) declare their own."""
+    return click.option("--judge", default="typesafe")(f)
+
+
+def _checkset_opt(f):
+    """The standard rubric selector."""
+    return click.option("--checkset", default=None,
+                         help="rubric name or YAML path")(f)
+
+
 @cli.command()
-@click.option("--data-dir", default=None, help="where to keep the sqlite store")
+@_data_dir_opt
 def init(data_dir: str | None) -> None:
     """Create the local store and verify the judge is live."""
     d = Path(data_dir) if data_dir else DEFAULT_DATA_DIR
@@ -133,10 +151,10 @@ def init(data_dir: str | None) -> None:
 
 
 @cli.command()
-@click.option("--judge", default="typesafe")
+@_judge_opt
 @click.option("--dataset", default="seed")
-@click.option("--checkset", default=None, help="rubric name or YAML path")
-@click.option("--data-dir", default=None)
+@_checkset_opt
+@_data_dir_opt
 def eval(judge: str, dataset: str, checkset: str | None, data_dir: str | None) -> None:
     """Measure a judge against labeled traces."""
     data = labels_mod.load_dataset(dataset)
@@ -176,8 +194,8 @@ def eval(judge: str, dataset: str, checkset: str | None, data_dir: str | None) -
 
 @cli.command()
 @click.option("--dataset", default="seed")
-@click.option("--judge", default="typesafe")
-@click.option("--checkset", default=None, help="rubric name or YAML path")
+@_judge_opt
+@_checkset_opt
 @click.option("--gate", default=0.6, help="abstain below this confidence")
 @click.option("--bins", default=10)
 @click.option("--out", default=None, help="write a shareable HTML report here")
@@ -548,7 +566,7 @@ def _sim_items(dataset: str | None, rubric: str | None):
 @click.option("--judge", default="typesafe", help="labeler judge")
 @click.option("--traces", required=True, help="JSON file: list of trace objects")
 @click.option("--out", default=None, help="output dataset path")
-@click.option("--checkset", default=None, help="rubric name or YAML path")
+@_checkset_opt
 @click.option("--append", "append_to", default=None,
               help="existing dataset: add this labeler instead of replacing")
 def label(judge: str, traces: str, out: str | None, checkset: str | None,
@@ -602,7 +620,7 @@ def check_cmd(key: str | None, trace: str, judge: str | None, url: str) -> None:
 
 
 @cli.command()
-@click.option("--data-dir", default=None)
+@_data_dir_opt
 def report(data_dir: str | None) -> None:
     """Show metered usage — the data you price from when the pilot ends."""
     store = _store(None if not data_dir else Path(data_dir))
@@ -615,7 +633,7 @@ def report(data_dir: str | None) -> None:
 
 
 @cli.command()
-@click.option("--data-dir", default=None)
+@_data_dir_opt
 @click.option("--qpm", default=600, help="questions per minute cap")
 @click.option("--allowance", default=500, help="free questions per calendar month")
 @click.option("--plan", default="free", type=click.Choice(["free", "pro", "trial"]))
@@ -631,7 +649,7 @@ def key(data_dir: str | None, qpm: int, allowance: int, plan: str,
 
 
 @cli.command()
-@click.option("--data-dir", default=None)
+@_data_dir_opt
 def funnel(data_dir: str | None) -> None:
     """Signup -> activated -> engaged -> returning, per key.
 
@@ -858,8 +876,8 @@ def gate(report: str, baseline: str | None) -> None:
                    "20 industries (see `agentcheck redteam --list-families`)")
 @click.option("--list-families", "list_families", is_flag=True, default=False,
               help="print every family and how many attacks it has, then exit")
-@click.option("--judge", default="typesafe")
-@click.option("--checkset", default=None, help="rubric name or YAML path")
+@_judge_opt
+@_checkset_opt
 @click.option("--out", default=None, help="write the attack table as JSON")
 @click.option("--max-asr", default=0.0, type=float,
               help="fail when the attack success rate exceeds this (default 0)")
@@ -1041,7 +1059,7 @@ def dataset(action: str, name: str | None, in_path: str | None,
 @click.option("--url", default="http://127.0.0.1:7373")
 @click.option("--bucket", default="day", type=click.Choice(["hour", "day", "week"]))
 @click.option("--days", default=30)
-@click.option("--data-dir", default=None)
+@_data_dir_opt
 @click.option("--all-keys", is_flag=True, help="roll up every key, not just one")
 @click.option("--drift", is_flag=True, help="compare the newer half against the older")
 @click.option("--json", "as_json", is_flag=True)
@@ -1102,7 +1120,7 @@ def monitor(key: str | None, url: str, bucket: str, days: int,
 
 @cli.command(name="rag")
 @click.option("--traces", required=True, help="JSON/JSONL of RAG traces")
-@click.option("--judge", default="typesafe")
+@_judge_opt
 @click.option("--min-faithfulness", default=None, type=float)
 @click.option("--max-hallucination", default=None, type=float)
 @click.option("--out", default=None)
@@ -1189,8 +1207,8 @@ def ci_init() -> None:
 
 
 @cli.command()
-@click.option("--data-dir", default=None)
-@click.option("--judge", default="typesafe")
+@_data_dir_opt
+@_judge_opt
 @click.option("--host", default="127.0.0.1")
 @click.option("--port", default=7373)
 @click.option("--demo", is_flag=True, default=False,
