@@ -193,7 +193,7 @@ The check runs when the block exits, so it sees what actually happened. A
 judge failure or network error degrades to `obs.error` — a broken check must
 never break the agent's run.
 
-### OpenAI wrapper (`pip install agentcheck[openai]`)
+### OpenAI wrapper (`pip install -e ".[openai]"`)
 
 One line and every tool the model requests is checked before your agent
 executes it, grouped under one trace id:
@@ -214,7 +214,7 @@ untouched). `block=True` raises before the response is returned, so the agent
 never executes the call. Check failures degrade to per-call `error` entries —
 same contract as the SDK.
 
-### Tracing (`pip install agentcheck[otel]`)
+### Tracing (`pip install -e ".[otel]"`)
 
 Every check emits an `agentcheck.check` span — tool, verdict, confidence,
 calibrated reliability + gap, decision, policy — to any OTLP/HTTP collector:
@@ -414,7 +414,7 @@ setup works on any VM.
   creation). Named singleton keys (demo/browser) rotate with overlap, so
   restarts never strand live clients. Legacy plaintext stores migrate
   automatically: history is re-pointed, plaintext purged.
-- **Postgres** (`pip install agentcheck[postgres]`):
+- **Postgres** (`pip install -e ".[postgres]"`):
   `AGENTCHECK_DB_URL=postgresql://... agentcheck serve`. Same code paths as
   SQLite, verified against real Postgres. Multi-machine deployments must use
   this — machines never share a SQLite file.
@@ -432,7 +432,7 @@ setup works on any VM.
 Pull run history into a day-one calibration dataset:
 
 ```bash
-pip install agentcheck[langfuse]   # or agentcheck[langsmith]
+pip install -e ".[langfuse]"   # or -e ".[langsmith]"
 agentcheck import langfuse --limit 200 --gold-score correctness --out imported.json
 agentcheck calibrate --dataset imported.json --publish
 ```
@@ -450,7 +450,7 @@ handler = AgentCheckCallbackHandler(key="ac_...", policy="default")
 # ... callbacks=[handler]  (mix in BaseCallbackHandler for type checks)
 
 from agentcheck.integrations.anthropic import watch as watch_anthropic
-client = watch_anthropic(anthropic.Anthropic(), key="ac_...")  # pip install agentcheck[anthropic]
+client = watch_anthropic(anthropic.Anthropic(), key="ac_...")  # pip install -e ".[anthropic]"
 
 from agentcheck.integrations.llama_index import AgentCheckHandler
 Settings.callback_manager = CallbackManager([AgentCheckHandler(key="ac_...")])
@@ -458,7 +458,7 @@ Settings.callback_manager = CallbackManager([AgentCheckHandler(key="ac_...")])
 
 Every adapter shares one core: observe-and-recommend by default, opt-in
 blocking, trace-chained spans, per-call `error` entries instead of ever
-breaking the run. `pip install agentcheck[langchain]` etc. adds the real SDK.
+breaking the run. `pip install -e ".[langchain]"` etc. adds the real SDK.
 
 ## Trust Score
 
@@ -841,6 +841,17 @@ quietly producing a number nobody questions:
 
 ## One-command install
 
+> **`pip install agentcheck` does not install this.** That name on PyPI is a
+> different project — "Trace ⋅ Replay ⋅ Test your AI agents like real
+> software" (0.1.0, released 2025-07), which also registers an `agentcheck`
+> command and points at a GitHub repository that does not exist. Installing it
+> gets you that tool, not this one. The distribution name here is a pending
+> decision; until it is made and published, install from a checkout:
+>
+> ```bash
+> pip install -e .
+> ```
+
 For a hosted prospect demo see [docs/HOSTING.md](docs/HOSTING.md) —
 ranked free options, demo mode, and the demo-day checklist.
 
@@ -854,12 +865,12 @@ useful with no key and no network. To judge live, put your key beside the
 compose file (`echo 'TYPESAFE_API_KEY=apikey_…' > .env`) and restart. The
 Decision Log and history persist in the `agentcheck-data` volume.
 
-Without Docker:
+Without Docker, from a checkout of this repository:
 
 ```bash
-pip install agentcheck          # ships web UI, 8 rubrics, 3 demo datasets
+pip install -e .               # ships web UI, 8 rubrics, 3 demo datasets
 export AGENTCHECK_HOME=~/.agentcheck
-agentcheck serve                # stub judge by default; nothing leaves the machine
+agentcheck serve               # stub judge by default; nothing leaves the machine
 ```
 
 ## Rubrics

@@ -82,7 +82,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: '3.11'}
-      - run: pip install agentcheck
+      # `agentcheck` is NOT on PyPI: that name is a different project. Until a
+      # distribution name is chosen and published (see README "One-command
+      # install"), the runner needs a checkout of this repository — a private
+      # action, a submodule, or a vendored copy.
+      - run: pip install -e .
       - run: |
           set -e
           for f in checksets/*.yaml; do agentcheck checkset lint "$f"; done
