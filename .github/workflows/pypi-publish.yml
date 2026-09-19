@@ -1,0 +1,47 @@
+# Publishes the distribution to PyPI. DELIBERATELY workflow_dispatch-only: it
+# must never run on push, because a publish is irreversible -- the `agentcheck`
+# name on PyPI is already occupied by a different project, and a mistaken
+# release here would be un-retractable.
+#
+# One-time setup, then this is a single click:
+#   1. On pypi.org, add a "pending publisher" for the project name
+#      `agentcheck-verify`, owned by this repository and workflow
+#      (`docker` is not involved; the workflow filename is pypi-publish.yml).
+#   2. Push a tag or run this workflow from the Actions tab.
+#
+# Uses PyPI trusted publishing (OIDC), so no token is stored.
+
+name: pypi
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      # Required for PyPI trusted publishing. If the repository restricts
+      # workflow permissions to read-only, this must be allowed in settings.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Check the built distribution
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

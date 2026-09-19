@@ -1,0 +1,67 @@
+# Publishes the container image to GHCR on every push to main and on version
+# tags, so a stranger can `docker run` the product without this repository
+# being public. The repo is private; the package must be flipped to public in
+# GitHub package settings once, after the first publish (see AGENTS.md).
+#
+# amd64 only for now: the GCP e2-micro is x86_64, and emulating arm64 on the
+# free runner makes every build crawl. Add it when there is a reason.
+
+name: docker
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        # The stub judge needs no network and no key, so a built image that
+        # cannot serve the UI is a broken image. Failing here beats shipping it.
+        run: |
+          docker run -d --name smoke -p 7373:7373 \
+            -e AGENTCHECK_HOME=/data ghcr.io/${{ github.repository }}:main
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:7373/ >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:7373/ | grep -q 'id="ledger"' \
+            || (docker logs smoke && exit 1)
+          curl -fsS http://127.0.0.1:7373/v1/billing/plans | grep -q '"plans"'
+          docker rm -f smoke >/dev/null

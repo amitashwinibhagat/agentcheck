@@ -845,10 +845,16 @@ quietly producing a number nobody questions:
 > different project — "Trace ⋅ Replay ⋅ Test your AI agents like real
 > software" (0.1.0, released 2025-07), which also registers an `agentcheck`
 > command and points at a GitHub repository that does not exist. Installing it
-> gets you that tool, not this one. The distribution name here is a pending
-> decision; until it is made and published, install from a checkout:
+> gets you that tool, not this one.
+>
+> **This distribution publishes as `agentcheck-verify`.** Until the first
+> PyPI release, two paths work today:
 >
 > ```bash
+> # container — no checkout, no Python
+> docker run --rm -p 7373:7373 ghcr.io/amitashwinibhagat/agentcheck
+>
+> # or from a checkout of this repository
 > pip install -e .
 > ```
 
