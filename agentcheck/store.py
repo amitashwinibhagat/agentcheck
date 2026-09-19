@@ -219,13 +219,28 @@ class Store:
         Every legacy row gets a kid; metering/results/events are re-pointed
         from the raw token to the kid; then the plaintext column is dropped.
         Fresh databases never have it at all.
+
+        Two failure modes this guards against, both real:
+
+        * ``key`` is the PRIMARY KEY in the legacy schema, so SQLite refuses
+          ``DROP COLUMN key``. The fallback must blank it, and it must blank
+          to a value unique per row: a constant ``''`` collides on the UNIQUE
+          constraint as soon as a store holds more than one legacy key, and
+          every open then died with IntegrityError — the store could never
+          be opened again.
+        * The migration runs on every open while the column survives, so it
+          must skip rows that already have a kid. Regenerating kids re-points
+          nothing (the metering rows moved on the first pass) and silently
+          orphans every metered call.
         """
         cols = _db.columns(c, "api_keys")
         if "key" not in cols:
             return
         for r in c.execute(
-                "SELECT key, name, created, qpm_limit FROM api_keys"):
-            raw, name = _db.first(r, 0), _db.first(r, 1)
+                "SELECT key, kid FROM api_keys"):
+            raw, existing = _db.first(r, 0), _db.first(r, 1)
+            if existing:
+                continue  # already migrated; re-keying would orphan history
             kid = self._new_kid()
             c.execute(
                 "UPDATE api_keys SET kid = ?, key_hash = ?, key_prefix = ? "
@@ -240,9 +255,11 @@ class Store:
         try:
             c.execute("ALTER TABLE api_keys DROP COLUMN key")
         except Exception:
-            # old sqlite without DROP COLUMN: blank the secrets instead;
-            # the column is never read again.
-            c.execute("UPDATE api_keys SET key = ''")
+            # Old sqlite without DROP COLUMN, or `key` is part of the PRIMARY
+            # KEY: blank the secrets instead. Per-row unique so the UNIQUE
+            # constraint holds; no plaintext remains.
+            c.execute("UPDATE api_keys SET key = '__migrated_' || kid "
+                      "WHERE key IS NOT NULL")
 
     @contextmanager
     def _conn(self):
