@@ -18,3 +18,5 @@ from agentcheck.routes import checksets
 from agentcheck.routes import checks
 from agentcheck.routes import monitor
 from agentcheck.routes import policies
+from agentcheck.routes import workspace
+from agentcheck.routes import workspaces
