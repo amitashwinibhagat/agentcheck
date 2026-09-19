@@ -7,11 +7,13 @@ import json
 import sqlite3
 
 from agentcheck import db as _db
+from agentcheck.store_identity import IdentityMixin
+from agentcheck.store_keys import KeysMixin, _hash_key
 import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metering (
@@ -148,10 +150,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_invites_hash
 """
 
 # Columns added after the first release. Existing local stores get them here.
-def _hash_key(raw: str) -> str:
-    return hashlib.sha256(raw.encode()).hexdigest()
-
-
 MIGRATIONS = (
     ("api_keys", "kid", "TEXT"),
     ("api_keys", "key_hash", "TEXT"),
@@ -172,7 +170,7 @@ MIGRATIONS = (
 )
 
 
-class Store:
+class Store(KeysMixin, IdentityMixin):
     def __init__(self, path: str | Path) -> None:
         """A file path (SQLite) or a postgresql:// URL (Postgres)."""
         self.target = str(path)
@@ -190,9 +188,6 @@ class Store:
     def dialect(self) -> str:
         return "postgres" if _db.is_postgres(self.target) else "sqlite"
 
-    @staticmethod
-    def _new_kid() -> str:
-        return "kid_" + uuid.uuid4().hex[:16]
 
     def _migrate_workspaces(self, c) -> None:
         """Every key belongs to a workspace. Existing keys each get their own,
@@ -290,239 +285,24 @@ class Store:
                   (wid, kid))
         return wid
 
-    def create_key(self, name: str, qpm_limit: int = 600,
-                   monthly_allowance: int = 500, plan: str = "free",
-                   trial_days: int | None = None) -> str:
-        """Create a key. The raw token is returned ONCE and never stored;
-        only its hash lives in the DB from here on."""
-        import secrets
-        key = "ac_" + secrets.token_urlsafe(32)
-        now = time.time()
-        trial_ends_at = (now + trial_days * 86400) if trial_days else None
-        kid = self._new_kid()
-        with self._conn() as c:
-            c.execute(
-                "INSERT INTO api_keys (kid, key_hash, key_prefix, name, created, "
-                "qpm_limit, monthly_allowance, plan, trial_ends_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
-                (kid, _hash_key(key), key[:8], name, now, qpm_limit,
-                 monthly_allowance, plan, trial_ends_at),
-            )
-            self._attach_workspace(c, kid, name, plan=plan)
-            c.execute(
-                "INSERT INTO events (ts, user_key, event, props_json) VALUES (?,?,?,?)",
-                (now, kid, "key_created",
-                 json.dumps({"name": name, "plan": plan,
-                             "prefix": key[:8]})),
-            )
-        return key
 
-    def lookup_kid(self, kid: str) -> sqlite3.Row | None:
-        """Look up by stable key id (post-auth identity, metering owner)."""
-        with self._conn() as c:
-            return c.execute("SELECT * FROM api_keys WHERE kid = ?",
-                             (kid,)).fetchone()
 
-    def lookup_key(self, key: str) -> sqlite3.Row | None:
-        """Look up by raw token. Matches the current hash or the previous
-        one (rotation overlap), so a rotation never 401s a live client."""
-        h = _hash_key(key)
-        with self._conn() as c:
-            row = c.execute("SELECT * FROM api_keys WHERE key_hash = ?",
-                            (h,)).fetchone()
-            if row is None:
-                row = c.execute("SELECT * FROM api_keys WHERE prev_key_hash = ?",
-                                (h,)).fetchone()
-            return row
 
-    def ensure_named_key(self, name: str, **kw) -> str:
-        """Singleton keys (demo/browser): rotate with overlap and return the
-        fresh raw token. The previous token keeps working until the NEXT
-        rotation, so restarts never strand live clients."""
-        import secrets
-        with self._conn() as c:
-            row = c.execute("SELECT * FROM api_keys WHERE name = ? "
-                            "ORDER BY created DESC LIMIT 1", (name,)).fetchone()
-            fresh = "ac_" + secrets.token_urlsafe(32)
-            if row is None:
-                new_kid = self._new_kid()
-                c.execute(
-                    "INSERT INTO api_keys (kid, key_hash, key_prefix, name, "
-                    "created, qpm_limit, monthly_allowance, plan) "
-                    "VALUES (?,?,?,?,?,?,?,?)",
-                    (new_kid, _hash_key(fresh), fresh[:8], name,
-                     time.time(), kw.get("qpm_limit", 600),
-                     kw.get("monthly_allowance", 500),
-                     kw.get("plan", "free")))
-                self._attach_workspace(c, new_kid, name,
-                                       plan=kw.get("plan", "free"))
-            else:
-                # Limits are refreshed on rotation too: raising the cap in a
-                # new release must reach a key that already exists.
-                c.execute("UPDATE api_keys SET prev_key_hash = key_hash, "
-                          "key_hash = ?, key_prefix = ?, qpm_limit = ?, "
-                          "monthly_allowance = ? WHERE kid = ?",
-                          (_hash_key(fresh), fresh[:8],
-                           kw.get("qpm_limit", row["qpm_limit"]),
-                           kw.get("monthly_allowance", row["monthly_allowance"]),
-                           row["kid"]))
-            return fresh
 
     # ── identity ───────────────────────────────────────────────────────
 
-    def upsert_user(self, provider: str, provider_user_id: str, email: str,
-                    name: str | None = None) -> dict:
-        """Find or create the person behind a provider account.
 
-        Identity is (provider, provider_user_id), never the email: emails get
-        reassigned, and treating one as an identity is how an account is
-        hijacked.
-        """
-        email = str(email).strip().lower()
-        now = time.time()
-        with self._conn() as c:
-            row = c.execute(
-                "SELECT * FROM users WHERE provider = ? AND "
-                "provider_user_id = ?", (provider, provider_user_id)).fetchone()
-            if row is not None:
-                c.execute("UPDATE users SET email = ?, name = COALESCE(?, name), "
-                          "last_login_at = ? WHERE id = ?",
-                          (email, name, now, _db.first(row)))
-                uid = _db.first(row)
-            else:
-                uid = "user_" + uuid.uuid4().hex[:16]
-                c.execute(
-                    "INSERT INTO users (id, provider, provider_user_id, email, "
-                    "name, created, last_login_at) VALUES (?,?,?,?,?,?,?)",
-                    (uid, provider, provider_user_id, email, name, now, now))
-        return self.user(uid)
 
-    def user(self, user_id: str) -> dict | None:
-        with self._conn() as c:
-            row = c.execute("SELECT * FROM users WHERE id = ?",
-                            (user_id,)).fetchone()
-        return None if row is None else dict(row)
 
-    def unclaimed_memberships(self, email: str) -> list[dict]:
-        """Invites already waiting for this address, not yet bound."""
-        with self._conn() as c:
-            rows = c.execute(
-                "SELECT * FROM workspace_members WHERE LOWER(email) = ? "
-                "AND user_id IS NULL", (str(email).strip().lower(),)).fetchall()
-        return [dict(r) for r in rows]
 
-    def bind_memberships(self, email: str, user_id: str) -> int:
-        """Claim every unclaimed membership for this address. Returns how
-        many were claimed."""
-        with self._conn() as c:
-            cur = c.execute(
-                "UPDATE workspace_members SET user_id = ? WHERE LOWER(email) = ? "
-                "AND user_id IS NULL",
-                (user_id, str(email).strip().lower()))
-            return cur.rowcount
 
-    def link_member(self, wid: str, email: str, user_id: str) -> bool:
-        """Attach a user to an unclaimed membership. Never re-points one that
-        already belongs to somebody."""
-        with self._conn() as c:
-            cur = c.execute(
-                "UPDATE workspace_members SET user_id = ? WHERE workspace_id = ? "
-                "AND LOWER(email) = ? AND user_id IS NULL",
-                (user_id, wid, str(email).strip().lower()))
-            return cur.rowcount == 1
 
-    def materialize_invite(self, invite: dict,
-                           user_id: str | None = None) -> bool:
-        """Turn an invite into a membership. The bridge that was missing.
 
-        An invite lived in ``workspace_invites`` while memberships live in
-        ``workspace_members``; without this, an invited person could sign in
-        and still not be a member. Seats are checked here too: an invite
-        created while a plan had room must not quietly mint a seat on a plan
-        that no longer does, so a full workspace leaves the invite pending.
-        """
-        from agentcheck import workspaces as _ws
-        wid = invite["workspace_id"]
-        email = str(invite["email"]).strip().lower()
-        existing = self.member_role(wid, email)
-        if existing is None:
-            ws = self.workspace(wid)
-            if ws is None:
-                return False
-            try:
-                _ws.check_seat_available(ws["seat_limit"], ws["members"],
-                                         plan=ws["plan"])
-            except _ws.WorkspaceError:
-                return False  # no seat: leave the invite pending
-            self.add_member(wid, email, invite.get("role") or "member",
-                            user_id)
-        elif user_id:
-            self.link_member(wid, email, user_id)
-        self.accept_invite(invite["id"], user_id)
-        return True
 
-    def claim_invites(self, email: str, user_id: str) -> list[dict]:
-        """Every pending invite for this address becomes a membership.
 
-        Called on sign-in: proving you own the address is exactly what the
-        invite was waiting for. Returns what was claimed.
-        """
-        e = str(email).strip().lower()
-        with self._conn() as c:
-            rows = c.execute(
-                "SELECT * FROM workspace_invites WHERE LOWER(email) = ? "
-                "AND accepted_at IS NULL", (e,)).fetchall()
-        claimed = []
-        for r in rows:
-            inv = dict(r)
-            if self.materialize_invite(inv, user_id):
-                claimed.append({"workspace_id": inv["workspace_id"],
-                                "role": inv.get("role") or "member"})
-        return claimed
 
-    def create_session(self, session: dict) -> dict:
-        sid = "ses_" + uuid.uuid4().hex[:16]
-        with self._conn() as c:
-            c.execute(
-                "INSERT INTO sessions (id, token_hash, user_id, created, "
-                "expires_at, last_seen_at) VALUES (?,?,?,?,?,?)",
-                (sid, session["token_hash"], session["user_id"],
-                 session["created"], session["expires_at"],
-                 session["created"]))
-        return {"id": sid, **session}
 
-    def session_by_token(self, token: str) -> dict | None:
-        """Look up a session by its raw cookie value. The token is hashed on
-        the way in, so the table holds no live credential."""
-        from agentcheck import auth as _auth
-        with self._conn() as c:
-            row = c.execute("SELECT * FROM sessions WHERE token_hash = ?",
-                            (_auth.hash_session(token),)).fetchone()
-        return None if row is None else dict(row)
 
-    def delete_session(self, token: str) -> bool:
-        from agentcheck import auth as _auth
-        with self._conn() as c:
-            cur = c.execute("DELETE FROM sessions WHERE token_hash = ?",
-                            (_auth.hash_session(token),))
-            return cur.rowcount == 1
-
-    def delete_user_sessions(self, user_id: str) -> int:
-        with self._conn() as c:
-            cur = c.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
-            return cur.rowcount
-
-    def touch_session(self, token: str) -> None:
-        from agentcheck import auth as _auth
-        with self._conn() as c:
-            c.execute("UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?",
-                      (time.time(), _auth.hash_session(token)))
-
-    def purge_expired_sessions(self) -> int:
-        with self._conn() as c:
-            cur = c.execute("DELETE FROM sessions WHERE expires_at < ?",
-                            (time.time(),))
-            return cur.rowcount
 
     # ── workspaces ─────────────────────────────────────────────────────
 
@@ -679,45 +459,7 @@ class Store:
                 (plan, seat_limit, wid))
             return cur.rowcount == 1
 
-    def set_plan(self, kid: str, plan: str, allowance: int, qpm: int,
-                 subscription_id: str | None = None) -> bool:
-        """Move a key to a plan. Allowance and qpm are passed in from OUR
-        catalogue, so a provider payload can never set a number."""
-        with self._conn() as c:
-            cur = c.execute(
-                "UPDATE api_keys SET plan = ?, monthly_allowance = ?, "
-                "qpm_limit = ? WHERE kid = ?",
-                (plan, allowance, qpm, kid))
-            return cur.rowcount == 1
 
-    def key_meta(self, key: str) -> dict | None:
-        """Metadata for a key, addressed by either identity.
-
-        Callers pass a kid (post-auth, from _authorize) or a raw token
-        (CLI, tests). Resolving both here is load-bearing: an unresolved
-        key silently falls back to the 500-question default, which made a
-        generous demo allowance read as exhausted.
-        """
-        row = self.lookup_kid(key)
-        if row is None:
-            row = self.lookup_key(key)
-        if row is None:
-            return None
-        return {
-            "name": row["name"],
-            "created": row["created"],
-            "qpm_limit": row["qpm_limit"],
-            "monthly_allowance": row["monthly_allowance"]
-            if "monthly_allowance" in row.keys() else 500,
-            "plan": row["plan"] if "plan" in row.keys() else "free",
-            "trial_ends_at": row["trial_ends_at"]
-            if "trial_ends_at" in row.keys() else None,
-            "trial_active": bool(
-                (row["plan"] if "plan" in row.keys() else "free") == "trial"
-                and (row["trial_ends_at"] if "trial_ends_at" in row.keys() else 0)
-                and row["trial_ends_at"] > time.time()
-            ),
-        }
 
     def record(self, **kw) -> None:
         with self._conn() as c:
