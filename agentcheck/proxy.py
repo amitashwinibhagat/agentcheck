@@ -93,6 +93,9 @@ def create_app(store: Store, default_judge: str = "typesafe",
     # ── trust ─────────────────────────────────────────────────────────
     routes.trust.register(app, store)
 
+    # ── decision policies ─────────────────────────────────────────────
+    routes.policies.register(app, store)
+
     routes.stream.register(app, store, bus, demo_mode)
 
     # ── calibration ───────────────────────────────────────────────────

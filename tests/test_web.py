@@ -337,3 +337,45 @@ def test_rag_metrics_endpoint_scores_a_trace():
     assert r.status_code == 200, r.text
     body = r.json()
     assert "metrics" in body and body["usage"]["questions"] > 0
+
+
+def test_policies_endpoint_lists_the_shipped_policies():
+    """No test covered /v1/policies, so when a refactor dropped its register()
+    call the endpoint 404'd and the suite stayed green. The browser test found
+    it; this makes it a unit-level failure next time."""
+    client, key, _, _ = _client()
+    r = client.get("/v1/policies", headers={"Authorization": f"Bearer {key}"})
+    assert r.status_code == 200, r.text
+    names = {p["name"] for p in r.json()["policies"]}
+    assert names, "at least one policy must be listed"
+
+
+def test_every_declared_route_is_actually_registered():
+    """Cross-check the source against the running app.
+
+    A route module can be imported, parse fine, and never be wired up — which
+    is exactly how /v1/policies went missing: the module existed and the
+    decorator existed, but nothing called register(). Comparing what the
+    modules declare with what the app exposes catches that, plus a decorator
+    silently overwritten by a duplicate path.
+    """
+    import re
+    from pathlib import Path
+
+    from agentcheck.proxy import create_app
+
+    declared = set()
+    for f in sorted(Path("agentcheck/routes").glob("*.py")):
+        for verb, path in re.findall(
+                r"@app\.(get|post|patch|delete|put)\(\s*['\"]([^'\"]+)",
+                f.read_text()):
+            declared.add((verb.upper(), path))
+    assert len(declared) > 30, f"route scan found only {len(declared)}; the regex broke"
+
+    store = Store(Path(tempfile.mkdtemp()) / "routes.db")
+    app = create_app(store, default_judge="stub")
+    registered = {(m, r.path) for r in app.routes
+                  for m in (getattr(r, "methods", None) or set())}
+
+    missing = sorted(declared - registered)
+    assert not missing, f"declared but never registered: {missing}"

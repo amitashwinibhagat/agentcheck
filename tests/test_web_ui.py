@@ -229,3 +229,67 @@ def test_key_gate_for_hosted_instances(base_url, ui_server):
         assert pg.evaluate("()=>document.querySelector('#sheet-key').hidden"), \
             "a key held for the tab must not re-gate on reload"
         b.close()
+
+
+def test_every_view_and_sheet_renders_without_error(base_url):
+    """The regression net for splitting app.js into modules.
+
+    A rename or a dropped export breaks exactly one view, and the narrower
+    tests each exercise only one path. This walks every nav section, every
+    trust sub-tab and every sheet, and fails on any page error or console
+    error along the way — a broken module usually throws rather than renders.
+    """
+    views = ["queue", "runs", "rubrics", "policies", "trust"]
+    sheets = ["upload", "examples", "connect"]
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": 1400, "height": 900})
+        errors = []
+        pg.on("pageerror", lambda e: errors.append(f"pageerror: {e}"))
+        pg.on("console", lambda m: errors.append(f"console.error: {m.text[:120]}")
+              if m.type == "error" else None)
+        pg.goto(base_url, wait_until="networkidle", timeout=20000)
+
+        for view in views:
+            pg.click(f'[data-view="{view}"]')
+            time.sleep(0.8)
+            assert not pg.evaluate(f"()=>document.getElementById('view-{view}').hidden"), \
+                f"{view} did not become visible"
+            # the section must have drawn something, not a blank panel
+            text = pg.evaluate(
+                f"()=>document.getElementById('view-{view}').innerText.trim()")
+            assert text, f"{view} rendered empty"
+
+        # trust sub-tabs each draw their own panel
+        pg.click('[data-view="trust"]')
+        time.sleep(0.8)
+        for tab in ("score", "report", "attack"):
+            pg.click(f'[data-trusttab="{tab}"]')
+            time.sleep(0.8)
+            shown = pg.evaluate(
+                "()=>['score','report','attack'].filter(t=>!document.getElementById('trust-panel-'+t).hidden)")
+            assert shown == [tab], f"{tab}: panels {shown}"
+            assert pg.evaluate(
+                f"()=>document.getElementById('trust-panel-{tab}').innerText.trim()"), \
+                f"trust {tab} rendered empty"
+
+        for sheet in sheets:
+            pg.click(f"#open-{sheet}")
+            time.sleep(0.4)
+            assert not pg.evaluate(f"()=>document.getElementById('sheet-{sheet}').hidden"), \
+                f"sheet-{sheet} did not open"
+            pg.click(f"#sheet-{sheet} .x")
+            time.sleep(0.2)
+
+        # an example produces a populated dock
+        pg.click('[data-view="queue"]')
+        time.sleep(0.4)
+        pg.click("#open-examples")
+        time.sleep(0.5)
+        pg.click("#ex-cards .card")
+        time.sleep(1.5)
+        assert pg.evaluate("()=>document.querySelectorAll('#dock .paper').length") == 1, \
+            "running an example did not populate the dock"
+
+        b.close()
+    assert not errors, "console/page errors while walking the UI:\n" + "\n".join(errors)
