@@ -87,6 +87,24 @@ from agentcheck.limits import AnswerCache, QuotaGuard
 from agentcheck.web import mount_web
 
 
+def _trust_for(store: Store, key: str, checkset: str | None,
+               gate: float) -> dict:
+    """The trust payload both the JSON endpoint and the SVG badge serve.
+
+    One function so the badge can never drift from the number: same rows,
+    same rubric scope, same adversarial probe, same calibration bridge.
+    """
+    rows = store.results(key, limit=5000)
+    if checkset:
+        rows = [r for r in rows if r.get("checkset") == checkset]
+    try:
+        adv = store.latest_event(key, "redteam_run")
+    except Exception:
+        adv = None
+    return trust.trust_score(rows, gate=gate, adversarial=adv,
+                             dataset_report=_calibration_for(store, checkset))
+
+
 def yaml_dirs():
     """Where rubrics are looked for, for display in the UI."""
     from agentcheck.checks.yaml_checksets import search_dirs
@@ -828,15 +846,7 @@ def create_app(store: Store, default_judge: str = "typesafe",
         out assessments, human agreement folds in as one component.
         """
         key = _authorize(authorization)
-        rows = store.results(key, limit=5000)
-        if checkset:
-            rows = [r for r in rows if r.get("checkset") == checkset]
-        try:
-            adv = store.latest_event(key, "redteam_run")
-        except Exception:
-            adv = None
-        return trust.trust_score(rows, gate=gate, adversarial=adv,
-                                 dataset_report=_calibration_for(store, checkset))
+        return _trust_for(store, key, checkset, gate)
 
     @app.get("/v1/trust.svg")
     async def trust_badge(authorization: str | None = Header(None),
@@ -844,15 +854,7 @@ def create_app(store: Store, default_judge: str = "typesafe",
                           gate: float = 0.6):
         """A shareable badge: trust level + score + sample size."""
         key = _authorize(authorization)
-        rows = store.results(key, limit=5000)
-        if checkset:
-            rows = [r for r in rows if r.get("checkset") == checkset]
-        try:
-            adv = store.latest_event(key, "redteam_run")
-        except Exception:
-            adv = None
-        ts = trust.trust_score(rows, gate=gate, adversarial=adv,
-                               dataset_report=_calibration_for(store, checkset))
+        ts = _trust_for(store, key, checkset, gate)
         return Response(content=trust.render_badge(ts), media_type="image/svg+xml")
 
     @app.get("/v1/policies")
