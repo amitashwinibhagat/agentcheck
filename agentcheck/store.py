@@ -1,20 +1,22 @@
-"""Metering and result store. Every call logged with its request id."""
+"""Metering and result store. Every call logged with its request id.
+
+Assembly only: the schema, the migrations, the connection, and the class that
+mixes the five domain mixins together. Nothing here knows what a workspace or
+a verdict is -- see store_keys, store_identity, store_tenancy, store_meter and
+store_verdict.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
-import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
 
 from agentcheck import db as _db
 from agentcheck.store_identity import IdentityMixin
 from agentcheck.store_keys import KeysMixin, _hash_key
+from agentcheck.store_meter import MeterMixin
 from agentcheck.store_tenancy import TenancyMixin
-import time
-import uuid
-from contextlib import contextmanager
-from pathlib import Path
-from typing import Any
+from agentcheck.store_verdict import VerdictMixin, trace_digest  # noqa: F401  (re-exported)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metering (
@@ -171,7 +173,7 @@ MIGRATIONS = (
 )
 
 
-class Store(KeysMixin, IdentityMixin, TenancyMixin):
+class Store(KeysMixin, IdentityMixin, TenancyMixin, MeterMixin, VerdictMixin):
     def __init__(self, path: str | Path) -> None:
         """A file path (SQLite) or a postgresql:// URL (Postgres)."""
         self.target = str(path)
@@ -285,426 +287,26 @@ class Store(KeysMixin, IdentityMixin, TenancyMixin):
 
 
 
-    def record(self, **kw) -> None:
-        with self._conn() as c:
-            c.execute(
-                """INSERT INTO metering
-                   (ts,user_key,judge,model,request_id,input_tokens,output_tokens,
-                    questions,server_ms,cached,ok)
-                   VALUES (:ts,:user_key,:judge,:model,:request_id,:input_tokens,
-                           :output_tokens,:questions,:server_ms,:cached,:ok)""",
-                {"ts": time.time(), **kw},
-            )
-
-    def used_in_window(self, user_key: str, seconds: float) -> int:
-        with self._conn() as c:
-            cur = c.execute(
-                "SELECT COALESCE(SUM(questions),0) FROM metering "
-                "WHERE user_key = ? AND ts >= ? AND ok = 1 AND cached = 0",
-                (user_key, time.time() - seconds),
-            )
-            return int(_db.first(cur.fetchone()))
-
-    @staticmethod
-    def _month_start(now: float | None = None) -> float:
-        import calendar
-        import datetime
-        now = now or time.time()
-        dt = datetime.datetime.fromtimestamp(now).replace(
-            day=1, hour=0, minute=0, second=0, microsecond=0)
-        month_start = dt.timestamp()
-        last_day = calendar.monthrange(dt.year, dt.month)[1]
-        resets_at = (dt + datetime.timedelta(days=last_day)).timestamp()
-        return month_start, resets_at
-
-    def used_this_month(self, user_key: str) -> int:
-        """Metered questions this calendar month. Cache replays are free."""
-        month_start, _ = self._month_start()
-        with self._conn() as c:
-            cur = c.execute(
-                "SELECT COALESCE(SUM(questions),0) FROM metering "
-                "WHERE user_key = ? AND ts >= ? AND ok = 1 AND cached = 0",
-                (user_key, month_start),
-            )
-            return int(_db.first(cur.fetchone()))
-
-    def fail_count_this_month(self, user_key: str) -> int:
-        """Flagged verdicts this month — the number the upgrade message quotes."""
-        month_start, _ = self._month_start()
-        with self._conn() as c:
-            cur = c.execute(
-                "SELECT COUNT(*) FROM results "
-                "WHERE user_key = ? AND ts >= ? AND verdict = 'fail'",
-                (user_key, month_start),
-            )
-            return int(_db.first(cur.fetchone()))
-
-    def record_event(self, user_key: str, event: str, props: dict | None = None) -> None:
-        with self._conn() as c:
-            c.execute(
-                "INSERT INTO events (ts, user_key, event, props_json) VALUES (?,?,?,?)",
-                (time.time(), user_key, event, json.dumps(props or {})),
-            )
-
-    def latest_event(self, user_key: str, event: str) -> dict | None:
-        """Most recent event props for this key, with its timestamp.
-
-        Used for slow-moving signals like red-team runs: the trust score
-        wants the latest adversarial probe without re-running it.
-        Returns None when the key has never produced this event.
-        """
-        with self._conn() as c:
-            r = c.execute(
-                "SELECT ts, props_json FROM events WHERE user_key = ? AND event = ? "
-                "ORDER BY ts DESC LIMIT 1",
-                (user_key, event)).fetchone()
-        if not r:
-            return None
-        try:
-            props = json.loads(r["props_json"] or "{}")
-        except Exception:
-            props = {}
-        props = dict(props)
-        props["ts"] = r["ts"]
-        return props
-
-    def funnel(self) -> dict:
-        """Signup -> activated -> engaged -> returning, per key.
-
-        signed_up:  key exists
-        activated:  >=1 successful judged call
-        engaged:    >=1 human sign-out (assessment)
-        returning:  judged call in the trailing 7 days
-        """
-        with self._conn() as c:
-            keys = [r["kid"] for r in c.execute("SELECT kid FROM api_keys").fetchall()]
-            checked = {r["user_key"] for r in c.execute(
-                "SELECT DISTINCT user_key FROM metering WHERE ok = 1 AND cached = 0").fetchall()}
-            signed = {r["user_key"] for r in c.execute(
-                "SELECT DISTINCT user_key FROM results WHERE assessment IS NOT NULL").fetchall()}
-            recent = {r["user_key"] for r in c.execute(
-                "SELECT DISTINCT user_key FROM metering "
-                "WHERE ok = 1 AND cached = 0 AND ts >= ?",
-                (time.time() - 7 * 86400,)).fetchall()}
-        stages = {
-            "signed_up": len(keys),
-            "activated": len(set(keys) & checked),
-            "engaged": len(set(keys) & signed),
-            "returning_7d": len(set(keys) & recent),
-        }
-        # Step conversion only where the stage is a true subset of the
-        # previous one. returning_7d is measured against activated — a key
-        # can have recent checks without ever signing one out.
-        conv = {}
-        base = {"signed_up": None, "activated": "signed_up",
-                "engaged": "activated", "returning_7d": "activated"}
-        for stage, against in base.items():
-            if against is None:
-                conv[stage] = 1.0 if stages[stage] else 0.0
-            else:
-                denom = stages[against]
-                conv[stage] = (stages[stage] / denom) if denom else 0.0
-        return {"stages": stages, "step_conversion": conv}
-
-    def runs(self, user_key: str, limit: int = 50,
-             only: str | None = None, tool: str | None = None) -> list[dict]:
-        """Agent runs (traces with steps), newest first, with a summary.
-
-        Grouped and aggregated in SQL rather than by pulling rows and
-        folding in Python: a busy key has more steps than a page should read.
-        Legacy rows with no trace_id are simply not runs.
-        """
-        where = ["user_key = ?", "trace_id IS NOT NULL"]
-        params: list[Any] = [user_key]
-        if tool:
-            where.append("trace_id IN (SELECT trace_id FROM results "
-                         "WHERE user_key = ? AND tool = ?)")
-            params += [user_key, tool]
-        sql = (
-            "SELECT trace_id AS tid, COUNT(*) AS n, MIN(ts) AS started, "
-            "MAX(ts) AS ended, "
-            "SUM(CASE WHEN verdict = 'fail' THEN 1 ELSE 0 END) AS failed, "
-            "SUM(CASE WHEN verdict = 'review' THEN 1 ELSE 0 END) AS review, "
-            "SUM(CASE WHEN verdict = 'pass' THEN 1 ELSE 0 END) AS passed "
-            "FROM results WHERE " + " AND ".join(where) +
-            " GROUP BY trace_id")
-        if only == "blocked":
-            sql += (" HAVING SUM(CASE WHEN verdict = 'fail' THEN 1 ELSE 0 END) > 0")
-        elif only == "review":
-            sql += (" HAVING SUM(CASE WHEN verdict = 'review' THEN 1 ELSE 0 END) > 0")
-        sql += " ORDER BY started DESC LIMIT ?"
-        params.append(int(limit))
-        with self._conn() as c:
-            rows = c.execute(sql, params).fetchall()
-        out = [dict(r) for r in rows]
-        if not out:
-            return []
-        # one extra query for the tools in this page, not one per run
-        ids = [r["tid"] for r in out]
-        marks = ",".join("?" * len(ids))
-        with self._conn() as c:
-            steps = c.execute(
-                f"SELECT trace_id, tool, verdict, confidence, decision "
-                f"FROM results WHERE user_key = ? AND trace_id IN ({marks}) "
-                f"ORDER BY ts ASC", [user_key, *ids]).fetchall()
-        by_run: dict[str, list[dict]] = {}
-        for s in steps:
-            by_run.setdefault(_db.first(s, 0), []).append({
-                "tool": _db.first(s, 1), "verdict": _db.first(s, 2),
-                "confidence": _db.first(s, 3), "decision": _db.first(s, 4)})
-        for r in out:
-            r["trace_id"] = r.pop("tid")
-            steps_ = by_run.get(r["trace_id"], [])
-            r["tools"] = [s["tool"] for s in steps_]
-            r["blocked"] = bool(r.get("failed"))
-            r["step_count"] = len(steps_)
-            r["duration_ms"] = round(
-                max(0.0, float(r.get("ended") or 0)
-                    - float(r.get("started") or 0)) * 1000, 1)
-        return out
-
-    def trace_steps(self, user_key: str, trace_id: str, limit: int = 500) -> list[dict]:
-        """One agent run, oldest first. Empty when the id is unknown."""
-        with self._conn() as c:
-            rows = c.execute(
-                "SELECT * FROM results WHERE user_key = ? AND trace_id = ? "
-                "ORDER BY ts ASC LIMIT ?",
-                (user_key, trace_id, limit)).fetchall()
-        return [self._public(dict(r)) for r in rows]
-
-    def results_by_run(self, user_key: str, run_id: str) -> list[dict]:
-        with self._conn() as c:
-            rows = c.execute(
-                "SELECT * FROM results WHERE user_key = ? AND run_id = ? ORDER BY ts",
-                (user_key, run_id),
-            ).fetchall()
-        return [self._public(dict(r)) for r in rows]
-
-    def totals(self, user_key: str | None = None) -> dict:
-        with self._conn() as c:
-            if user_key:
-                cur = c.execute(
-                    """SELECT COUNT(*) calls, SUM(questions) questions,
-                              SUM(input_tokens) in_tok, SUM(output_tokens) out_tok,
-                              SUM(cached) cached
-                       FROM metering WHERE user_key = ?""",
-                    (user_key,),
-                )
-            else:
-                cur = c.execute(
-                    """SELECT COUNT(*) calls, SUM(questions) questions,
-                              SUM(input_tokens) in_tok, SUM(output_tokens) out_tok,
-                              SUM(cached) cached
-                       FROM metering"""
-                )
-            row = cur.fetchone()
-            return {k: (row[k] or 0) for k in row.keys()}
-
-    def per_user(self) -> list[dict]:
-        with self._conn() as c:
-            cur = c.execute(
-                """SELECT user_key, SUM(questions) questions,
-                          SUM(input_tokens+output_tokens) tokens, COUNT(*) calls
-                   FROM metering GROUP BY user_key ORDER BY tokens DESC"""
-            )
-            return [dict(r) for r in cur.fetchall()]
-
-    def record_eval(self, **kw) -> None:
-        with self._conn() as c:
-            c.execute(
-                """INSERT INTO eval_runs
-                   (ts,judge,dataset,tp,fp,tn,fn,mean_confidence)
-                   VALUES (:ts,:judge,:dataset,:tp,:fp,:tn,:fn,:mean_confidence)""",
-                {"ts": time.time(), **kw},
-            )
-
-    def save_result(self, user_key: str, trace: dict, payload: dict,
-                    run_id: str | None = None,
-                    checkset: str | None = None,
-                    trace_id: str | None = None,
-                    span_id: str | None = None,
-                    parent_span_id: str | None = None) -> dict:
-        """Store a result, or return the existing row for an identical trace.
-
-        Dedupe is deliberate: re-clicking an example should not grow the log.
-        One row per distinct (request, tool, args) per account.
-        A trace_id opts out: steps in an agent run are events, so the same
-        tool called twice in one run stores two rows.
-        """
-        digest = trace_digest(trace, checkset)
-        if not trace_id:
-            existing = self.find_by_hash(user_key, digest)
-            if existing is not None:
-                row = dict(existing)
-                row["duplicate"] = True
-                return self._public(row)
-
-        result_id = "rs_" + uuid.uuid4().hex[:16]
-        extra = {k: v for k, v in trace.items() if k not in ("request", "tool", "args")}
-        row = {
-            "id": result_id,
-            "user_key": user_key,
-            "ts": time.time(),
-            "request": str(trace.get("request") or ""),
-            "tool": str(trace.get("tool") or ""),
-            "args_json": json.dumps(trace.get("args", {}), default=str),
-            "extra_json": json.dumps(extra, default=str),
-            "verdict": payload.get("trace_verdict"),
-            "confidence": payload.get("confidence"),
-            "severity": payload.get("severity"),
-            "checks_json": json.dumps(payload.get("checks") or {}, default=str),
-            "usage_json": json.dumps(payload.get("usage") or {}, default=str),
-            "model": payload.get("model"),
-            "request_id": (payload.get("usage") or {}).get("request_id"),
-            "cached": 1 if payload.get("cached") else 0,
-            "assessment": None,
-            "run_id": run_id,
-            "trace_hash": digest,
-            "checkset": checkset,
-            "trace_id": trace_id,
-            "span_id": span_id,
-            "parent_span_id": parent_span_id,
-            "decision": payload.get("decision"),
-            "policy": payload.get("policy"),
-        }
-        with self._conn() as c:
-            c.execute(
-                """INSERT INTO results
-                   (id,user_key,ts,request,tool,args_json,extra_json,verdict,confidence,
-                    severity,checks_json,usage_json,model,request_id,cached,assessment,
-                    run_id,trace_hash,checkset,trace_id,span_id,parent_span_id,
-                    decision,policy)
-                   VALUES (:id,:user_key,:ts,:request,:tool,:args_json,:extra_json,:verdict,
-                           :confidence,:severity,:checks_json,:usage_json,:model,:request_id,
-                           :cached,:assessment,:run_id,:trace_hash,:checkset,:trace_id,
-                           :span_id,:parent_span_id,:decision,:policy)""",
-                row,
-            )
-        out = self._public(row)
-        out["duplicate"] = False
-        return out
-
-    def find_by_hash(self, user_key: str, trace_hash: str) -> sqlite3.Row | None:
-        with self._conn() as c:
-            return c.execute(
-                "SELECT * FROM results WHERE user_key = ? AND trace_hash = ? LIMIT 1",
-                (user_key, trace_hash),
-            ).fetchone()
-
-    def results(self, user_key: str, verdict: str | None = None,
-                limit: int = 500) -> list[dict]:
-        sql = "SELECT * FROM results WHERE user_key = ?"
-        params: list[Any] = [user_key]
-        if verdict in ("pass", "review", "fail"):
-            sql += " AND verdict = ?"
-            params.append(verdict)
-        sql += " ORDER BY ts DESC LIMIT ?"
-        params.append(limit)
-        with self._conn() as c:
-            rows = c.execute(sql, params).fetchall()
-        return [self._public(dict(r)) for r in rows]
-
-    def result_counts(self, user_key: str) -> dict:
-        with self._conn() as c:
-            rows = c.execute(
-                "SELECT verdict, COUNT(*) n FROM results WHERE user_key = ? GROUP BY verdict",
-                (user_key,),
-            ).fetchall()
-        out = {"pass": 0, "review": 0, "fail": 0, "total": 0}
-        for r in rows:
-            key = r["verdict"] if r["verdict"] in out else None
-            if key:
-                out[key] = r["n"]
-            out["total"] += r["n"]
-        with self._conn() as c:
-            out["assessed"] = _db.first(c.execute(
-                "SELECT COUNT(*) FROM results WHERE user_key = ? AND assessment IS NOT NULL",
-                (user_key,)).fetchone())
-            out["batches"] = _db.first(c.execute(
-                "SELECT COUNT(DISTINCT run_id) FROM results "
-                "WHERE user_key = ? AND run_id IS NOT NULL",
-                (user_key,)).fetchone())
-        return out
-
-    def result(self, user_key: str, result_id: str) -> dict | None:
-        with self._conn() as c:
-            row = c.execute(
-                "SELECT * FROM results WHERE user_key = ? AND id = ?",
-                (user_key, result_id),
-            ).fetchone()
-        return None if row is None else self._public(dict(row))
-
-    def assess(self, user_key: str, result_id: str, assessment: str) -> bool:
-        with self._conn() as c:
-            cur = c.execute(
-                "UPDATE results SET assessment = ? WHERE user_key = ? AND id = ?",
-                (assessment, user_key, result_id),
-            )
-            ok = cur.rowcount == 1
-            if ok:
-                c.execute(
-                    "INSERT INTO events (ts, user_key, event, props_json) VALUES (?,?,?,?)",
-                    (time.time(), user_key, "signed_out",
-                     json.dumps({"result_id": result_id, "assessment": assessment})),
-                )
-            return ok
-
-    def delete_result(self, user_key: str, result_id: str) -> bool:
-        with self._conn() as c:
-            cur = c.execute(
-                "DELETE FROM results WHERE user_key = ? AND id = ?",
-                (user_key, result_id),
-            )
-            return cur.rowcount == 1
-
-    @staticmethod
-    def _public(row: dict[str, Any]) -> dict:
-        args = row.get("args_json")
-        extra = row.get("extra_json")
-        checks = row.get("checks_json")
-        usage = row.get("usage_json")
-        return {
-            "id": row["id"],
-            "ts": row["ts"],
-            "request": row.get("request") or "",
-            "tool": row.get("tool") or "",
-            "args": json.loads(args) if isinstance(args, str) else (args or {}),
-            "extra": json.loads(extra) if isinstance(extra, str) else (extra or {}),
-            "trace_verdict": row.get("verdict"),
-            "confidence": row.get("confidence"),
-            "severity": row.get("severity"),
-            "checks": json.loads(checks) if isinstance(checks, str) else (checks or {}),
-            "usage": json.loads(usage) if isinstance(usage, str) else (usage or {}),
-            "model": row.get("model"),
-            "cached": bool(row.get("cached")),
-            "assessment": row.get("assessment"),
-            "run_id": row.get("run_id"),
-            "checkset": row.get("checkset"),
-            "trace_id": row.get("trace_id"),
-            "span_id": row.get("span_id"),
-            "parent_span_id": row.get("parent_span_id"),
-            "decision": row.get("decision"),
-            "policy": row.get("policy"),
-            "duplicate": row.get("duplicate", False),
-        }
 
 
-def trace_digest(trace: dict, checkset: str | None = None) -> str:
-    """Stable identity for a trace, so the log holds one row per distinct call.
 
-    The rubric is part of the identity. The same trace judged by ``safety`` and
-    by ``refund-policy`` produces different verdicts, so deduping across rubrics
-    would silently return another rubric's answer.
-    """
-    blob = json.dumps(
-        {
-            "request": str(trace.get("request") or "").strip(),
-            "tool": str(trace.get("tool") or "").strip(),
-            "args": trace.get("args") or {},
-            "question": str(trace.get("question") or "").strip() or None,
-            "checkset": checkset,
-        },
-        sort_keys=True,
-        default=str,
-    )
-    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
