@@ -25,6 +25,7 @@ export const state = {
   // per-view selections, so switching away and back keeps your place
   bucket: "day",
   rtCheckset: "safety",
+  rtCorpus: { total: 0, counts: {}, families: [], mechanics: [], industries: [] },
   trustTab: "score",
   runFilter: "all",
   selectedRun: null,
