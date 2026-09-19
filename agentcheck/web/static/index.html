@@ -235,6 +235,32 @@
   </div>
 </div>
 
+<!-- ── key gate (hosted, non-demo instances) ─────────────────────────── -->
+<div class="sheet" id="sheet-key" hidden role="dialog" aria-modal="true" aria-labelledby="h-key">
+  <div class="sheet-in">
+    <div class="sheet-head">
+      <div>
+        <h2 id="h-key">Connect this browser</h2>
+        <p>This workspace is private — it does not hand out a key the way the
+        demo does. Paste the API key you were issued and this browser will use
+        it. It stays in this tab and is not written to disk.</p>
+      </div>
+      <button type="button" class="x" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label for="key-input">API key</label>
+        <input id="key-input" type="password" placeholder="ac_…"
+               autocomplete="off" spellcheck="false">
+      </div>
+      <div class="rowline">
+        <button type="button" class="btn" id="use-key">Use this key</button>
+        <span class="note" id="key-status" aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/assets/app.js" type="module"></script>
 </body>
 </html>

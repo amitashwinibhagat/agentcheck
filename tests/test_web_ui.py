@@ -46,7 +46,7 @@ class _Server:
     def __init__(self):
         self.port = _free_port()
         store = Store(Path(tempfile.mkdtemp()) / "ui.db")
-        store.create_key("ui", qpm_limit=600)
+        self.key = store.create_key("ui", qpm_limit=600)
         app = create_app(store, default_judge="stub")
         import uvicorn
 
@@ -72,9 +72,14 @@ class _Server:
 
 
 @pytest.fixture(scope="module")
-def base_url():
+def ui_server():
     with _Server() as s:
-        yield f"http://127.0.0.1:{s.port}"
+        yield s
+
+
+@pytest.fixture(scope="module")
+def base_url(ui_server):
+    return f"http://127.0.0.1:{ui_server.port}"
 
 
 def test_sample_upload_scores_three_rows(base_url):
@@ -181,4 +186,48 @@ def test_signoff_closes_the_loop(base_url):
         # An abstention is neither agreement nor a miss: the count rises, the
         # percentage does not move.
         assert "3 signed out, judge agreed on 50%" in hint(), hint()
+        b.close()
+
+
+def test_key_gate_for_hosted_instances(base_url, ui_server):
+    """A non-demo instance does not hand out a key. The hosted UI used to show
+    'Is agentcheck serve running?' and offered no way in, which made every
+    non-demo deployment API-only in the browser."""
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page()
+        # Simulate the hosted case: bootstrap refuses.
+        pg.route("**/v1/bootstrap", lambda r: r.fulfill(
+            status=403, content_type="application/json",
+            body='{"detail":"browser auto-login is only for localhost"}'))
+        pg.goto(base_url, wait_until="networkidle", timeout=20000)
+
+        assert not pg.evaluate("()=>document.querySelector('#sheet-key').hidden"), \
+            "the key sheet must open when bootstrap is refused"
+        body = pg.evaluate("()=>document.body.textContent")
+        assert "serve running" not in body, "must not claim the server is down"
+
+        # A wrong key is rejected in place, not on the next page load.
+        pg.fill("#key-input", "ac_definitely-wrong")
+        pg.click("#use-key")
+        for _ in range(20):
+            time.sleep(0.15)
+            if "not recognised" in pg.evaluate(
+                    "()=>document.querySelector('#key-status').textContent"):
+                break
+        assert "not recognised" in pg.evaluate(
+            "()=>document.querySelector('#key-status').textContent")
+
+        # The issued key gets in, and survives a reload for this tab.
+        pg.fill("#key-input", ui_server.key)
+        pg.click("#use-key")
+        for _ in range(40):
+            time.sleep(0.15)
+            if pg.evaluate("()=>!document.querySelector('#sheet-key').hidden") is False:
+                break
+        assert pg.evaluate("()=>document.querySelector('#sheet-key').hidden")
+        pg.reload(wait_until="networkidle")
+        time.sleep(0.8)
+        assert pg.evaluate("()=>document.querySelector('#sheet-key').hidden"), \
+            "a key held for the tab must not re-gate on reload"
         b.close()

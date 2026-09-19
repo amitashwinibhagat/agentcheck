@@ -861,6 +861,14 @@ async function load() {
     counts = data.counts || { pass: 0, review: 0, fail: 0, total: 0 };
     banner("");
   } catch (e) {
+    if (e.status === 401) {
+      // The key this tab holds is no longer valid: drop it and re-gate rather
+      // than leaving a half-loaded queue on screen.
+      sessionStorage.removeItem(KEY_STORE);
+      key = "";
+      gateForKey("That key was not recognised. Paste a valid one.");
+      return;
+    }
     banner("Could not reach the workspace: " + e.message);
     return;
   }
@@ -1069,15 +1077,39 @@ $("ex-cards").addEventListener("click", (e) => {
   if (card) runExample(card.dataset.ex);
 });
 
+const KEY_STORE = "agentcheck_key";
+
+// A hosted, non-demo instance does not hand out a key — the operator issues
+// one. So: a key this tab already holds wins, then the local/demo bootstrap,
+// and only then the gate. Without the gate the hosted UI showed "Is agentcheck
+// serve running?" and offered no way to enter a key at all, which made every
+// non-demo deployment API-only in the browser.
+function gateForKey(why) {
+  openSheet("key");
+  $("key-status").textContent = why || "";
+  $("key-input").focus();
+}
+
 async function boot() {
-  try {
-    key = (await api("/v1/bootstrap")).key;
-    examples = await fetch("/assets/examples.json").then((r) => r.json());
-  } catch {
-    banner("Could not start the local workspace. Is agentcheck serve running?");
-    $("rows").innerHTML = "";
-    return;
+  key = sessionStorage.getItem(KEY_STORE) || "";
+  if (!key) {
+    try {
+      key = (await api("/v1/bootstrap")).key;
+    } catch {
+      gateForKey();
+      $("rows").innerHTML = `<div class="empty">
+        <h2>This workspace is private</h2>
+        <p>It does not hand out a key the way the demo does. Enter the API key
+        you were issued to load the queue.</p>
+        <div class="doors"><button type="button" class="btn" data-door="key">Enter your key</button></div>
+      </div>`;
+      $("rows").querySelector("[data-door]").addEventListener("click", () => gateForKey());
+      return;
+    }
   }
+  try {
+    examples = await fetch("/assets/examples.json").then((r) => r.json());
+  } catch { /* examples are a door, not the product; the queue still loads */ }
   renderExamples();
   await loadChecksets();
   // The origin the page was actually served from. Hardcoding localhost here
@@ -1097,5 +1129,29 @@ async function boot() {
   -d '{"traces":[{"request":"…","tool":"…","args":{}}]}'`;
   await load();
 }
+
+async function useKey() {
+  const v = $("key-input").value.trim();
+  if (!v) { $("key-status").textContent = "Paste the key you were issued."; return; }
+  // Verify before closing: a rejected key should say so here, not later as an
+  // empty queue that looks like a bug.
+  const prev = key;
+  key = v;
+  try {
+    await api("/v1/results");
+  } catch (e) {
+    key = prev;
+    $("key-status").textContent = e.status === 401
+      ? "That key was not recognised." : "Could not reach the workspace.";
+    return;
+  }
+  sessionStorage.setItem(KEY_STORE, v);
+  $("key-input").value = "";
+  closeSheets();
+  await boot();
+}
+
+$("use-key").addEventListener("click", useKey);
+$("key-input").addEventListener("keydown", (e) => { if (e.key === "Enter") useKey(); });
 
 boot();
