@@ -319,3 +319,21 @@ def test_published_calibration_upgrades_trust_tier(monkeypatch):
     # A calibration for a different rubric must not upgrade this one.
     other = client.get("/v1/trust?checkset=refund-policy", headers=headers).json()
     assert other["tier"] == "consistency", other
+
+
+def test_rag_metrics_endpoint_scores_a_trace():
+    """POST /v1/metrics/rag had zero coverage, which is how a refactor broke
+    its request model without a single test failing: FastAPI could no longer
+    resolve `req`, so every call 422'd as 'missing query req'. Pins both the
+    shape rejection and a successful score under the stub judge."""
+    client, key, _, _ = _client()
+    h = {"Authorization": f"Bearer {key}"}
+    r = client.post("/v1/metrics/rag", json={"state": {"request": "x"}}, headers=h)
+    assert r.status_code == 422, r.text
+    trace = {"question": "What is the refund window?",
+             "answer": "30 days.",
+             "contexts": ["Refunds are available within 30 days of purchase."]}
+    r = client.post("/v1/metrics/rag", json={"state": trace}, headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "metrics" in body and body["usage"]["questions"] > 0

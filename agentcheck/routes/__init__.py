@@ -15,5 +15,6 @@ domain in the app.
 """
 
 from agentcheck.routes import checksets
+from agentcheck.routes import checks
 from agentcheck.routes import monitor
 from agentcheck.routes import policies

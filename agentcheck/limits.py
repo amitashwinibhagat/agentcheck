@@ -42,6 +42,11 @@ class AnswerCache:
         self._store: OrderedDict[str, tuple] = OrderedDict()
         self._max = max_entries
 
+    def __init__(self, max_entries: int = 8192) -> None:
+        from collections import OrderedDict
+        self._store: OrderedDict[str, tuple] = OrderedDict()
+        self._max = max_entries
+
     @staticmethod
     def _key(state: Any, questions: Any) -> str:
         serial_q = []
@@ -66,3 +71,6 @@ class AnswerCache:
         self._store.move_to_end(k)
         while len(self._store) > self._max:
             self._store.popitem(last=False)
+
+
+WINDOW_SECONDS = 60.0
