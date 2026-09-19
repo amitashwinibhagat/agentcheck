@@ -30,84 +30,15 @@ from agentcheck import tracing
 from agentcheck import routes
 from agentcheck.routes.checks import AskRequest  # annotation for rag_metrics until it moves
 from agentcheck.stream import Bus, result_payload, sse_format
-from agentcheck.reliability import ReliabilityModel, annotate
+from agentcheck.reliability import ReliabilityModel, annotate, load_report
 
 
-def _load_reliability(store: Store) -> dict | None:
-    """The workspace's latest saved calibration report, if any.
-
-    `calibrate --publish` writes it to $AGENTCHECK_HOME (default
-    ~/.agentcheck); a copy next to the DB also works, for workspaces that
-    keep everything in one directory. None means uncalibrated, and the
-    model says so honestly.
-    """
-    from pathlib import Path
-    candidates = []
-    home = os.environ.get("AGENTCHECK_HOME")
-    if home:
-        candidates.append(Path(home) / "calibration.json")
-    else:
-        try:
-            candidates.append(Path.home() / ".agentcheck" / "calibration.json")
-        except Exception:
-            pass
-    try:
-        # Postgres-backed stores have no local directory; the
-        # AGENTCHECK_HOME sidecar above is the source of truth there.
-        if getattr(store, "path", None) is not None:
-            candidates.append(store.path.parent / "calibration.json")
-    except Exception:
-        pass
-    for p in candidates:
-        try:
-            if p.exists():
-                return json.loads(p.read_text())
-        except Exception:
-            continue
-    return None
-
-
-def _calibration_for(store: Store, checkset: str | None) -> dict | None:
-    """The published calibration report, in the shape trust_score wants.
-
-    This is the bridge the measured tier never had: `calibrate --publish`
-    writes calibration.json for the reliability model, but the trust endpoint
-    read nothing, so the tier could never leave `consistency` however many
-    labels were supplied. Scoped by rubric — a calibration for `safety` must
-    not upgrade the tier for `refund-policy`.
-    """
-    report = trust.dataset_report_from_calibration(_load_reliability(store))
-    if report and checkset and report.get("checkset") and \
-            report["checkset"] != checkset:
-        return None
-    return report
 from agentcheck import redteam
 from agentcheck.evals import datasets as ds
 from agentcheck.judges import get_judge
 from agentcheck.store import Store
 from agentcheck.limits import AnswerCache, QuotaGuard, WINDOW_SECONDS
 from agentcheck.web import mount_web
-
-
-def _trust_for(store: Store, key: str, checkset: str | None,
-               gate: float) -> dict:
-    """The trust payload both the JSON endpoint and the SVG badge serve.
-
-    One function so the badge can never drift from the number: same rows,
-    same rubric scope, same adversarial probe, same calibration bridge.
-    """
-    rows = store.results(key, limit=5000)
-    if checkset:
-        rows = [r for r in rows if r.get("checkset") == checkset]
-    try:
-        adv = store.latest_event(key, "redteam_run")
-    except Exception:
-        adv = None
-    return trust.trust_score(rows, gate=gate, adversarial=adv,
-                             dataset_report=_calibration_for(store, checkset))
-
-
-WINDOW_SECONDS = 60.0
 
 
 def get_checkset(name: str):
@@ -152,7 +83,7 @@ def create_app(store: Store, default_judge: str = "typesafe",
     bus = bus or Bus()
     # Per-decision reliability, if a calibration report has been loaded for
     # this workspace. Without one, lookups fall back to raw confidence.
-    reliability = ReliabilityModel(_load_reliability(store))
+    reliability = ReliabilityModel(load_report(store))
     # OTel export, if AGENTCHECK_OTLP_ENDPOINT is set and the SDK is
     # installed. Never raises; without it checks run exactly as before.
     try:
@@ -216,123 +147,12 @@ def create_app(store: Store, default_judge: str = "typesafe",
     routes.workspaces.register(app, store)
 
     # ── billing ────────────────────────────────────────────
-
-    @app.get("/v1/billing/plans")
-    def billing_plans():
-        """The catalogue. Public: a pricing page needs it before signup."""
-        p = billing.get_provider()
-        return {"plans": billing.plans_public(), "provider": p.name,
-                "configured": p.configured()}
-
-    @app.post("/v1/billing/checkout")
-    async def billing_checkout(payload: dict | None = None,
-                               authorization: str | None = Header(None)):
-        """Start a subscription for the CALLER's key.
-
-        The plan is chosen here and written into the provider's notes, so the
-        webhook that returns can be matched back to this key without any
-        client-supplied identity.
-        """
-        key = _authorize(authorization)
-        plan_name = str((payload or {}).get("plan") or "pro")
-        try:
-            billing.plan(plan_name)
-        except billing.BillingError as e:
-            raise HTTPException(422, str(e)) from None
-        provider = billing.get_provider()
-        if not provider.configured():
-            raise HTTPException(
-                503, "billing is not configured on this deployment")
-        try:
-            sub = provider.create_subscription(key, plan_name)
-        except billing.BillingError as e:
-            raise HTTPException(502, str(e)) from None
-        store.record_event(key, "billing_checkout_started",
-                           {"plan": plan_name,
-                            "subscription_id": sub.get("id")})
-        return {"subscription_id": sub.get("id"), "plan": plan_name,
-                "provider": provider.name,
-                "key_id": getattr(provider, "key_id", None)}
-
-    @app.post("/v1/billing/webhook")
-    async def billing_webhook(request: Request):
-        """Provider callback. Unauthenticated BY DESIGN, because the
-        signature is the authentication.
-
-        Order matters: verify over the raw bytes first; only then parse. No
-        field of an unverified payload is read.
-        """
-        provider = billing.get_provider()
-        body = await request.body()
-        signature = request.headers.get("X-Razorpay-Signature")
-        if not provider.verify_webhook(body, signature):
-            raise HTTPException(401, "invalid webhook signature")
-        try:
-            event = provider.parse_event(body)
-            result = billing.apply_event(store, event)
-        except billing.BillingError as e:
-            raise HTTPException(400, str(e)) from None
-        return {"received": True, **result}
+    routes.billing.register(app, store)
 
     # ── trust ─────────────────────────────────────────────────────────
+    routes.trust.register(app, store)
 
-    @app.get("/v1/trust")
-    async def trust_score_endpoint(authorization: str | None = Header(None),
-                    checkset: str | None = None,
-                    gate: float = 0.6):
-        """Live Trust Score for the caller's stored results.
-
-        Tier 'consistency': no labels needed. When the caller has signed
-        out assessments, human agreement folds in as one component.
-        """
-        key = _authorize(authorization)
-        return _trust_for(store, key, checkset, gate)
-
-    @app.get("/v1/trust.svg")
-    async def trust_badge(authorization: str | None = Header(None),
-                          checkset: str | None = None,
-                          gate: float = 0.6):
-        """A shareable badge: trust level + score + sample size."""
-        key = _authorize(authorization)
-        ts = _trust_for(store, key, checkset, gate)
-        return Response(content=trust.render_badge(ts), media_type="image/svg+xml")
-
-    routes.policies.register(app, store)
-
-    @app.get("/v1/stream")
-    async def decision_stream(request: Request = None,
-                              authorization: str | None = Header(None),
-                              key: str | None = None):
-        """Server-Sent Events: every saved result for this key, live.
-
-        EventSource cannot set headers, so the browser passes the key as a
-        query param. Locally that is the localhost convenience; in demo mode
-        the demo key works from anywhere (it is capped, not admin).
-        """
-        if key and (_local(request) or demo_mode):
-            key = key
-            if store.lookup_key(key) is None:
-                raise HTTPException(401, "unknown api key")
-        else:
-            key = _authorize(authorization)
-        q = bus.subscribe(key)
-
-        async def gen():
-            try:
-                yield sse_format({"kind": "hello", "key": "you"})
-                while True:
-                    try:
-                        msg = await asyncio.wait_for(q.get(), timeout=15)
-                    except asyncio.TimeoutError:
-                        yield ": keepalive\n\n"
-                        continue
-                    yield sse_format(msg)
-            finally:
-                bus.unsubscribe(key, q)
-
-        return StreamingResponse(gen(), media_type="text/event-stream",
-                                 headers={"Cache-Control": "no-cache",
-                                          "X-Accel-Buffering": "no"})
+    routes.stream.register(app, store, bus, demo_mode)
 
     # ── calibration ───────────────────────────────────────────────────
 

@@ -16,9 +16,45 @@ Honesty rules the design:
 
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
 from typing import Any
 
 BINS = 10
+
+
+def load_report(store) -> dict | None:
+    """The workspace's latest saved calibration report, if any.
+
+    `calibrate --publish` writes it to $AGENTCHECK_HOME (default
+    ~/.agentcheck); a copy next to the DB also works, for workspaces that
+    keep everything in one directory. None means uncalibrated, and the
+    model says so honestly.
+    """
+    candidates = []
+    home = os.environ.get("AGENTCHECK_HOME")
+    if home:
+        candidates.append(Path(home) / "calibration.json")
+    else:
+        try:
+            candidates.append(Path.home() / ".agentcheck" / "calibration.json")
+        except Exception:
+            pass
+    try:
+        # Postgres-backed stores have no local directory; the
+        # AGENTCHECK_HOME sidecar above is the source of truth there.
+        if getattr(store, "path", None) is not None:
+            candidates.append(store.path.parent / "calibration.json")
+    except Exception:
+        pass
+    for p in candidates:
+        try:
+            if p.exists():
+                return json.loads(p.read_text())
+        except Exception:
+            continue
+    return None
 
 
 def bin_index(conf: float) -> int:
