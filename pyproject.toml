@@ -1,0 +1,41 @@
+[project]
+name = "agentcheck"
+version = "0.1.0"
+description = "Calibrated verification for agent tool calls. Proxy + meter + eval harness."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "click>=8.1",
+    "rich>=13.7",
+    "PyYAML>=6.0",
+    "sqlalchemy>=2.0",
+    "aiosqlite>=0.20",
+]
+
+[project.optional-dependencies]
+typesafe = ["typesafe-sdk>=0.6.0"]
+openai = ["openai>=1.0"]
+otel = ["opentelemetry-api>=1.0", "opentelemetry-sdk>=1.0", "opentelemetry-exporter-otlp-proto-http>=1.0"]
+langfuse = ["langfuse>=2.0"]
+langsmith = ["langsmith>=0.1"]
+langchain = ["langchain-core>=0.2"]
+anthropic = ["anthropic>=0.30"]
+llama-index = ["llama-index-core>=0.10"]
+postgres = ["psycopg[binary]>=3.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+agentcheck = "agentcheck.cli:cli"
+
+[project.entry-points.pytest11]
+agentcheck = "agentcheck.pytest_plugin"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agentcheck"]

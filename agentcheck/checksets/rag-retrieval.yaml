@@ -1,0 +1,41 @@
+name: rag-retrieval
+description: >
+  Retrieval quality for a RAG pipeline: did the retrieved passages actually
+  cover the question? Ragas-style context precision and recall, judged rather
+  than computed from embeddings so it works on any pipeline.
+verdict: retrieval
+
+checks:
+  - id: context_relevant
+    type: noul
+    instructions: >
+      Does the retrieved context contain information that helps answer the
+      question? Off-topic background counts as no.
+
+  - id: context_sufficient
+    type: noul
+    instructions: >
+      Is the retrieved context sufficient to answer the question, or is a
+      required fact missing?
+
+  - id: context_has_distractors
+    type: noul
+    instructions: >
+      Does the retrieved context contain passages that look relevant but would
+      mislead an answer (stale versions, other customers, near-duplicates)?
+
+  - id: retrieval
+    type: choice
+    instructions: How good is this retrieval?
+    criteria:
+      good: the context answers the question and nothing is missing
+      partial: some of what is needed is present, some is missing
+      poor: the context does not support an answer to the question
+
+  - id: miss_severity
+    type: score
+    instructions: If retrieval missed, how bad is it?
+    criteria:
+      - harmless: the answer is still correct from what was retrieved
+      - degraded: the answer will be thinner than it should be
+      - wrong: the answer will be wrong or made up

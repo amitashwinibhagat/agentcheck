@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentCheck — tool-call review</title>
+<link rel="icon" href="/assets/icons/favicon.ico" sizes="any">
+<link rel="icon" href="/assets/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<a class="skip" href="#ledger">Skip to the queue</a>
+
+<div class="shell">
+  <header class="head">
+    <div>
+      <div class="mark">AgentCheck<span id="mark-sub">the decision log</span>
+        <nav class="nav" id="nav" aria-label="Sections">
+          <button type="button" class="on" data-view="queue">Decision Log</button>
+          <button type="button" data-view="runs">Runs</button>
+          <button type="button" data-view="rubrics">Rubrics</button>
+          <button type="button" data-view="trust">Trust</button>
+          <button type="button" data-view="policies">Policies</button>
+          <button type="button" data-view="monitor">Trust Report</button>
+          <button type="button" data-view="redteam">Trust Under Attack</button>
+        </nav>
+      </div>
+      <div class="counts" id="counts" role="group" aria-label="Filter by verdict">
+        <button type="button" class="count on" data-filter="all">
+          <b id="c-total">0</b><i>calls checked</i>
+        </button>
+        <button type="button" class="count flag" data-filter="fail">
+          <b id="c-fail">0</b><i>flagged</i>
+        </button>
+        <button type="button" class="count rev" data-filter="review">
+          <b id="c-review">0</b><i>need a look</i>
+        </button>
+        <button type="button" class="count" data-filter="pass">
+          <b id="c-pass">0</b><i>look fine</i>
+        </button>
+      </div>
+    </div>
+    <div class="tools">
+      <span class="usage-pill" id="usage-pill" title="Questions judged this month against the free allowance">…</span>
+      <input id="search" class="search" type="search" autocomplete="off"
+             placeholder="Search calls…" aria-label="Search checked calls">
+      <button type="button" class="btn ghost" id="live-toggle" aria-pressed="false"
+              title="Stream new judgments as they arrive">Live off</button>
+      <button type="button" class="btn" id="open-upload">Score my traces</button>
+      <button type="button" class="btn ghost" id="open-examples">Examples</button>
+      <button type="button" class="btn ghost" id="open-connect">Connect</button>
+    </div>
+  </header>
+
+  <main class="ledger" id="ledger">
+    <p class="banner" id="banner" role="alert" hidden></p>
+
+    <section id="view-queue">
+      <p class="hintline" id="hintline"></p>
+      <div class="rows" id="rows"></div>
+    </section>
+
+    <section id="view-runs" hidden>
+      <div class="panel-head">
+        <h1>Runs</h1>
+        <p class="lede">Every agent run, newest first. A run is the sequence of tool calls
+        that share one trace id — what the agent did, in order, and what we said about each step.</p>
+        <div class="rowline">
+          <button type="button" class="btn ghost on" data-runfilter="all">All runs</button>
+          <button type="button" class="btn ghost" data-runfilter="blocked">With a block</button>
+          <button type="button" class="btn ghost" data-runfilter="review">Needs a look</button>
+          <button type="button" class="btn ghost" id="runs-refresh">Refresh</button>
+          <span class="note" id="runs-status" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="runsplit">
+        <div class="rows" id="run-list"></div>
+        <div id="run-detail"></div>
+      </div>
+    </section>
+
+    <section id="view-rubrics" hidden>
+      <div class="panel-head">
+        <h1>Rubrics</h1>
+        <p class="lede">A rubric is a YAML file. Drop one in <code>./checksets/</code> or
+        <code>$AGENTCHECK_HOME/checksets/</code> and it appears here and in every CLI command.</p>
+      </div>
+      <div id="rubric-list"></div>
+      <div id="rubric-detail"></div>
+    </section>
+
+    <section id="view-monitor" hidden>
+      <div class="panel-head">
+        <h1>Trust Report</h1>
+        <p class="lede">Judgment volume, verdict mix and confidence over time. Drift compares the
+        newer half of the window against the older.</p>
+        <div class="rowline">
+          <div class="seg" role="group" aria-label="Bucket size">
+            <button type="button" data-bucket="hour">Hour</button>
+            <button type="button" data-bucket="day" class="on">Day</button>
+            <button type="button" data-bucket="week">Week</button>
+          </div>
+          <button type="button" class="btn ghost" id="run-drift">Check drift</button>
+        </div>
+      </div>
+      <div id="monitor-out"></div>
+    </section>
+
+    <section id="view-trust" hidden>
+      <div class="panel-head">
+        <h1>Trust</h1>
+        <p class="lede">How much to trust this judge on this rubric — measured from its own
+        behavior, not asserted. A judge that always says 0.9 is not discriminating, whatever
+        its accuracy. The score is only as good as its sample: n is always shown.</p>
+        <div class="rowline">
+          <select id="trust-checkset" aria-label="Rubric"></select>
+          <button type="button" class="btn" id="trust-refresh">Recompute</button>
+          <span class="note" id="trust-status" aria-live="polite"></span>
+        </div>
+      </div>
+      <div id="trust-out"></div>
+    </section>
+
+    <section id="view-policies" hidden>
+      <div class="panel-head">
+        <h1>Policies</h1>
+        <p class="lede">What happens to each judged call. The verdict is the machine's
+        judgment; the decision is the policy's ruling. This release is
+        observe-and-recommend: decisions are returned and logged, never actioned.</p>
+      </div>
+      <div id="policies-out"></div>
+    </section>
+
+    <section id="view-redteam" hidden>
+      <div class="panel-head">
+        <h1>Trust Under Attack</h1>
+        <p class="lede">Adversarial tool calls a good rubric must flag. Attack success rate is the
+        share that came back <em>pass</em>. These cases are designed to be unambiguous, so any
+        non-zero rate is a finding.</p>
+        <div class="rowline">
+          <select id="rt-checkset" aria-label="Rubric"></select>
+          <select id="rt-families" aria-label="Attack families"></select>
+          <button type="button" class="btn" id="run-redteam">Run the suite</button>
+          <span class="note" id="rt-status" aria-live="polite"></span>
+        </div>
+        <p class="hint" id="rt-cost"></p>
+      </div>
+      <div id="redteam-out"></div>
+    </section>
+  </main>
+
+  <aside class="dock" id="dock" aria-label="Selected call">
+    <div class="dock-in" id="dock-in"></div>
+  </aside>
+</div>
+
+<!-- ── score your traces ─────────────────────────────────────────────── -->
+<div class="sheet" id="sheet-upload" hidden role="dialog" aria-modal="true" aria-labelledby="h-upload">
+  <div class="sheet-in">
+    <div class="sheet-head">
+      <div>
+        <h2 id="h-upload">Score your traces</h2>
+        <p>Upload a <code>.json</code> array or <code>.jsonl</code> file, or paste below. Each row needs
+        <code>request</code>, <code>tool</code> and <code>args</code>. Up to 100 rows per run. Rows are
+        grouped as one upload in the queue.</p>
+      </div>
+      <button type="button" class="x" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label for="file">File</label>
+        <div class="file"><input id="file" type="file" accept=".json,.jsonl,.txt,application/json"></div>
+      </div>
+      <div class="field">
+        <label for="paste">Or paste JSON / JSONL</label>
+        <textarea id="paste" rows="7" spellcheck="false"
+          placeholder='[{"request":"Summarize my unread inbox","tool":"search_inbox","args":{"query":"unread"}}]'></textarea>
+      </div>
+      <div class="field">
+        <label for="upload-checkset">Rubric</label>
+        <select id="upload-checkset"></select>
+        <p class="hint" id="upload-rubric-hint"></p>
+      </div>
+      <div class="rowline">
+        <button type="button" class="btn" id="run-upload">Score file</button>
+        <button type="button" class="btn ghost" id="load-sample">Load a 3-row sample</button>
+        <span class="note" id="upload-status" aria-live="polite"></span>
+      </div>
+      <div id="upload-out"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── examples ──────────────────────────────────────────────────────── -->
+<div class="sheet" id="sheet-examples" hidden role="dialog" aria-modal="true" aria-labelledby="h-ex">
+  <div class="sheet-in">
+    <div class="sheet-head">
+      <div>
+        <h2 id="h-ex">Examples</h2>
+        <p>Real-shaped tool calls. Click one to check it and open the result in the dock.
+        Examples are not your data — they are here so you can see how the checks behave.</p>
+      </div>
+      <button type="button" class="x" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label for="ex-search">Filter</label>
+        <input id="ex-search" type="text" placeholder="inbox, drop table, slack, transfer…">
+      </div>
+      <div class="cards" id="ex-cards"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── connect ───────────────────────────────────────────────────────── -->
+<div class="sheet" id="sheet-connect" hidden role="dialog" aria-modal="true" aria-labelledby="h-cx">
+  <div class="sheet-in">
+    <div class="sheet-head">
+      <div>
+        <h2 id="h-cx">Connect an agent</h2>
+        <p>POST the same three fields after each tool call. Review flags in the queue.
+        Do not block the tool on the response yet — start in observation mode.</p>
+      </div>
+      <button type="button" class="x" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-body">
+      <p class="kicker">Send one call</p>
+      <pre class="snippet" id="snippet"></pre>
+      <p class="kicker" style="margin-top:20px">Send many</p>
+      <pre class="snippet" id="snippet-batch"></pre>
+      <p class="note" style="margin-top:16px">Calls are judged by the configured model and stored in this
+      workspace. The key stays in this browser tab and is not written to disk.</p>
+    </div>
+  </div>
+</div>
+
+<script src="/assets/app.js" type="module"></script>
+</body>
+</html>

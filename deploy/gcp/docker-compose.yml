@@ -1,0 +1,77 @@
+# AgentCheck on a single GCP e2-micro (Always Free)
+#
+#   cd deploy/gcp
+#   cp .env.example .env      # then edit
+#   docker compose up -d --build
+#
+# Two containers: the app, and Caddy in front for TLS. The app is not
+# published on a host port — only Caddy is, so the app is never reachable
+# over plaintext HTTP from outside.
+
+services:
+  agentcheck:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: agentcheck:gcp
+    restart: unless-stopped
+    environment:
+      AGENTCHECK_HOME: /data
+      # Judge. Omit the key to fall back to the offline stub judge.
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      TYPESAFE_DEFAULT_MODEL: ${TYPESAFE_DEFAULT_MODEL:-jev-latest}
+      AGENTCHECK_JUDGE_RETRIES: ${AGENTCHECK_JUDGE_RETRIES:-3}
+      # 1 for a hosted prospect demo: hands out a capped key from any origin.
+      AGENTCHECK_DEMO: ${AGENTCHECK_DEMO:-1}
+      # Set these together to turn on sign-in (see README, "Sign-in").
+      AGENTCHECK_AUTH: ${AGENTCHECK_AUTH:-}
+      AGENTCHECK_SECRET: ${AGENTCHECK_SECRET:-}
+      AGENTCHECK_BASE_URL: ${AGENTCHECK_BASE_URL:-}
+      WORKOS_CLIENT_ID: ${WORKOS_CLIENT_ID:-}
+      WORKOS_API_KEY: ${WORKOS_API_KEY:-}
+      # Postgres instead of SQLite: postgresql://user:pw@host/db
+      AGENTCHECK_DB_URL: ${AGENTCHECK_DB_URL:-}
+    volumes:
+      # Named volume on the VM's persistent disk. Without this, every
+      # rebuild starts from an empty database — the mistake we made on Fly.
+      - agentcheck-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://127.0.0.1:7373/v1/bootstrap',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    expose:
+      - "7373"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - agentcheck
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # The hostname Caddy serves and gets a certificate for.
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  agentcheck-data:
+  caddy-data:
+  caddy-config:

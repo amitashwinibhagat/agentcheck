@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.pyc
+# macOS metadata: AppleDouble files end in .yaml and decode as binary,
+# which broke rubric discovery inside the image
+._*
+.DS_Store
+**/._*
+*.egg-info/
+.pytest_cache/
+agentcheck.db
+.env
+agentcheck-home/
+.impeccable/
+.review/
+icon-output/
+node_modules/
+output/

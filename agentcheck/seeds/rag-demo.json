@@ -1,0 +1,232 @@
+{
+  "name": "rag-demo",
+  "note": "RAG demo set; each trace carries a reference answer so hallucination/correctness metrics are measurable.",
+  "traces": [
+    {
+      "trace": {
+        "question": "What is the return window?",
+        "answer": "Returns are accepted within 30 days of delivery.",
+        "contexts": [
+          "Items can be returned within 30 days of the delivery date."
+        ],
+        "ground_truth": "30 days from delivery."
+      },
+      "label_verdict": "pass",
+      "should_fail": false,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "What is the return window?",
+        "answer": "Returns are accepted within 90 days and we refund shipping too.",
+        "contexts": [
+          "Items can be returned within 30 days of the delivery date."
+        ],
+        "ground_truth": "30 days from delivery."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "Is overnight shipping available?",
+        "answer": "Overnight shipping is available on all orders over $25.",
+        "contexts": [
+          "Standard shipping takes 3-5 business days.",
+          "Free ground shipping over $50."
+        ],
+        "ground_truth": "Standard 3-5 days; free ground over $50."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "What is the cost of overnight shipping?",
+        "answer": "There is no overnight shipping option; only standard 3-5 day delivery.",
+        "contexts": [
+          "Overnight shipping is available for $12.99 on checkout."
+        ],
+        "ground_truth": "Overnight is $12.99."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "How do I reset my password?",
+        "answer": "You can reset your password from the account settings page under the security tab.",
+        "contexts": [
+          "Password reset is under Account > Settings > Security."
+        ],
+        "ground_truth": "Account > Settings > Security."
+      },
+      "label_verdict": "pass",
+      "should_fail": false,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "How do I reset my password?",
+        "answer": "Call our support line and an agent will reset it for you.",
+        "contexts": [
+          "Password reset is under Account > Settings > Security."
+        ],
+        "ground_truth": "Account > Settings > Security."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "Does the plan include SSO?",
+        "answer": "SSO is included on the Enterprise plan only.",
+        "contexts": [
+          "SAML SSO is available to Enterprise customers."
+        ],
+        "ground_truth": "Enterprise only."
+      },
+      "label_verdict": "pass",
+      "should_fail": false,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "Does the plan include SSO?",
+        "answer": "SSO is included for everyone on every plan.",
+        "contexts": [
+          "SAML SSO is available to Enterprise customers."
+        ],
+        "ground_truth": "Enterprise only."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "What happens to my data if I cancel?",
+        "answer": "Your data is deleted immediately on cancellation.",
+        "contexts": [
+          "Cancellation deletes workspaces after 90 days.",
+          "A CSV export is available before cancellation."
+        ],
+        "ground_truth": "Deleted after 90 days; export available first."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "What is the SLA?",
+        "answer": "Our SLA guarantees 99.95% uptime.",
+        "contexts": [
+          "Paid plans carry a 99.9% uptime SLA."
+        ],
+        "ground_truth": "99.9% uptime."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "How long do replays last?",
+        "answer": "Replays are retained for 14 days on the free plan and 90 days on paid.",
+        "contexts": [
+          "Free plan retains replays 14 days, paid retains 90 days."
+        ],
+        "ground_truth": "14 free / 90 paid."
+      },
+      "label_verdict": "pass",
+      "should_fail": false,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "How long do replays last?",
+        "answer": "All replays are retained forever on every plan.",
+        "contexts": [
+          "Free plan retains replays 14 days, paid retains 90 days."
+        ],
+        "ground_truth": "14 free / 90 paid."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "Can I invite teammates on the free plan?",
+        "answer": "The free plan supports up to 3 seats.",
+        "contexts": [
+          "Free plan: 1 seat. Paid plans add seats."
+        ],
+        "ground_truth": "1 seat on free."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "Can I invite teammates on the free plan?",
+        "answer": "Yes, the free plan supports unlimited seats.",
+        "contexts": [
+          "Free plan: 1 seat. Paid plans add seats."
+        ],
+        "ground_truth": "1 seat on free."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "Is there a usage limit on the API?",
+        "answer": "The API allows 1,000 requests per month on the starter plan.",
+        "contexts": [
+          "Starter API limit is 1,000 requests/month."
+        ],
+        "ground_truth": "1,000/month starter."
+      },
+      "label_verdict": "pass",
+      "should_fail": false,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    },
+    {
+      "trace": {
+        "question": "Is there a usage limit on the API?",
+        "answer": "There are no API limits on any plan.",
+        "contexts": [
+          "Starter API limit is 1,000 requests/month."
+        ],
+        "ground_truth": "1,000/month starter."
+      },
+      "label_verdict": "fail",
+      "should_fail": true,
+      "labeler": "human:demo",
+      "labeler_model": "human"
+    }
+  ]
+}

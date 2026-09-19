@@ -1,0 +1,40 @@
+# AgentCheck — one-command local workspace
+#
+#   docker compose up --build
+#   → http://localhost:7373/
+#
+# The stub judge works with zero configuration (nothing leaves the machine).
+# To judge with TypeSafe, put your key in a .env file next to this compose file:
+#   echo 'TYPESAFE_API_KEY=apikey_...' > .env
+# and run: docker compose up --build
+#
+# Data persists in the agentcheck-data volume, so your queue and history
+# survive restarts.
+
+services:
+  agentcheck:
+    build: .
+    image: agentcheck:local
+    ports:
+      - "7373:7373"
+    environment:
+      AGENTCHECK_HOME: /data
+      # Only set when you want live judging; omit for the offline stub judge.
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      # Set AGENTCHECK_DEMO=1 for a hosted prospect demo (capped demo key).
+      AGENTCHECK_DEMO: ${AGENTCHECK_DEMO:-}
+      TYPESAFE_DEFAULT_MODEL: ${TYPESAFE_DEFAULT_MODEL:-jev-latest}
+      # Judge retry behaviour (see README Robustness).
+      AGENTCHECK_JUDGE_RETRIES: ${AGENTCHECK_JUDGE_RETRIES:-3}
+    volumes:
+      - agentcheck-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://127.0.0.1:7373/v1/bootstrap',timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  agentcheck-data:

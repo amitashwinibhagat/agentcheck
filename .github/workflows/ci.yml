@@ -1,0 +1,23 @@
+name: ci
+on:
+  push:
+  pull_request:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # lint always runs; the red-team leg runs only with a judge key
+      - uses: ./
+        with:
+          judge-key: ${{ secrets.TYPESAFE_API_KEY }}
+          max-asr: "0.10"
+      - name: Full test suite
+        run: |
+          pip install "$GITHUB_WORKSPACE"
+          pip install pytest
+          python -m pytest tests/ -q

@@ -1,0 +1,24 @@
+# Caddy terminates TLS here and proxies to the app.
+#
+# SITE_ADDRESS and ACME_EMAIL come from the environment (see .env.example),
+# so this file is the same for every deployment.
+#
+# No domain? `34-12-34-56.sslip.io` resolves to 34.12.34.56 for free and Caddy
+# will get a real certificate for it. Fine for a demo; use a domain you
+# control for anything a customer will see.
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# flush_interval -1 disables response buffering. /v1/stream is Server-Sent
+	# Events; with buffering on, live events arrive in clumps or not at all.
+	# Logs go to stdout on purpose: Caddy's /data volume holds certificates,
+	# and an access log written there would grow it forever. Docker's log
+	# rotation (see docker-compose.yml) bounds it instead.
+	reverse_proxy agentcheck:7373 {
+		flush_interval -1
+	}
+}

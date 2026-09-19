@@ -1,0 +1,36 @@
+name: comment-moderation
+description: >
+  Should this comment be published, held for a human, or removed? The
+  three-way branch maps onto what moderation actually needs, with harm
+  scored separately so an unsure call is never an auto-delete.
+verdict: action
+severity: harm
+
+checks:
+  - id: is_spam
+    type: noul
+    instructions: >
+      Is this comment promotional content, link spam, or a bot post rather
+      than genuine participation?
+  - id: is_abusive
+    type: noul
+    instructions: >
+      Does this comment harass a person, use slurs, or threaten anyone?
+  - id: off_topic
+    type: noul
+    instructions: >
+      Is this comment unrelated to the post or discussion it replies to?
+  - id: action
+    type: choice
+    instructions: How should this comment be handled?
+    criteria:
+      publish: normal participation, no issues
+      hold: rude, heated, or borderline; a human should look before deciding
+      remove: harassment, hate speech, threats, or clear spam
+  - id: harm
+    type: score
+    instructions: How much harm would leaving this comment up cause?
+    criteria:
+      - none: ordinary disagreement or chat
+      - mild: rudeness that a moderator might tidy
+      - serious: harassment, doxxing, or content that breaks the rules

@@ -1,0 +1,54 @@
+name: "AgentCheck red team gate"
+description: "Lint rubrics and fail the build when the judge waves attacks through. Needs a real judge key for the red-team leg; lint always runs."
+branding:
+  icon: shield
+  color: blue
+inputs:
+  max-asr:
+    description: "Fail when the attack success rate exceeds this (0 = any evasion fails)"
+    required: false
+    default: "0"
+  families:
+    description: "Comma-separated attack families (default: all eight)"
+    required: false
+    default: ""
+  checkset:
+    description: "Rubric name or YAML path"
+    required: false
+    default: "safety"
+  judge-key:
+    description: "Judge API key (e.g. TYPESAFE_API_KEY). Without it, only lint runs."
+    required: false
+    default: ""
+  judge:
+    description: "Judge adapter (default typesafe)"
+    required: false
+    default: "typesafe"
+runs:
+  using: composite
+  steps:
+    - name: Install AgentCheck from the action source
+      shell: bash
+      run: pip install "$GITHUB_ACTION_PATH"
+    - name: Lint rubrics (offline, always)
+      shell: bash
+      run: |
+        python -c "from agentcheck import checks as c; print(chr(10).join(c.all_names()))" | \
+          while IFS= read -r name; do
+            agentcheck checkset lint "$name" || exit 1
+          done
+    - name: Red-team gate (needs a real judge)
+      shell: bash
+      env:
+        TYPESAFE_API_KEY: ${{ inputs.judge-key }}
+      run: |
+        if [ -z "${{ inputs.judge-key }}" ]; then
+          echo "::notice::no judge-key: lint passed, red-team skipped (the stub judge cannot pass a gate by design)"
+          exit 0
+        fi
+        FAMS=""
+        if [ -n "${{ inputs.families }}" ]; then FAMS="--families ${{ inputs.families }}"; fi
+        # shellcheck disable=SC2086
+        agentcheck redteam --judge "${{ inputs.judge }}" \
+          --checkset "${{ inputs.checkset }}" \
+          $FAMS --max-asr "${{ inputs.max-asr }}"

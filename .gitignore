@@ -1,0 +1,37 @@
+# Secrets. Never commit a real env file — `deploy/gcp/.env` is the one the
+# runbook tells people to create, and it holds the judge key, the WorkOS
+# credentials and the session signing secret.
+.env
+*.env
+!.env.example
+.env.*
+deploy/gcp/.env
+
+# Local database and generated reports
+*.db
+agentcheck.db
+trust-validation.json
+calibration.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+
+# macOS. AppleDouble files (`._foo.yaml`) matter here specifically: they match
+# a `*.yaml` glob but are binary, and reading one used to 500 the rubric list.
+.DS_Store
+._*
+**/._*
+
+# Design scratch, not product. The icons the app actually serves live in
+# agentcheck/web/static/icons/ and are committed.
+.impeccable/
+.review/
+icon-output/
+output/

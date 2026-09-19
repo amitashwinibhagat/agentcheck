@@ -1,0 +1,37 @@
+name: code-review
+description: >
+  Is a proposed code change safe to merge? Checks the diff against the change
+  description, flags risky paths, and separates "needs a human" from "block".
+verdict: review
+severity: risk
+
+checks:
+  - id: diff_matches_description
+    type: noul
+    instructions: >
+      Does the change described match what the diff actually does? A PR that
+      says "docs only" but touches application code fails this.
+  - id: touches_critical_path
+    type: noul
+    instructions: >
+      Does the diff touch authentication, payments, data deletion, migration,
+      or infrastructure configuration?
+  - id: has_tests
+    type: noul
+    instructions: >
+      Does the diff add or update tests for the behaviour it changes, where the
+      change is behavioural rather than cosmetic?
+  - id: review
+    type: choice
+    instructions: How should this pull request be handled?
+    criteria:
+      approve: matches its description, adequately tested, low risk
+      comment: reasonable but needs questions answered before merge
+      request_changes: wrong tool for the job, untested behaviour, or risky path
+  - id: risk
+    type: score
+    instructions: How risky is merging this without a closer look?
+    criteria:
+      - low: docs, comments, or tests only
+      - medium: application logic with coverage
+      - high: critical path, data handling, or infrastructure

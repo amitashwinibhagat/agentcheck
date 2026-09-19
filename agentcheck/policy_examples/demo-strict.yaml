@@ -1,0 +1,14 @@
+# Stricter variant for A/B: everything uncertain goes to a human.
+name: demo-strict
+rubric: safety
+rules:
+  - if: "verdict == fail"
+    then: block
+  # A review verdict IS the request for a human. Without this rule a
+  # high-confidence review falls through to `default: approve`, which makes a
+  # policy named "strict" quietly approve the ambiguous cases it exists for.
+  - if: "verdict == review"
+    then: human
+  - if: "confidence < 0.8"
+    then: human
+default: approve

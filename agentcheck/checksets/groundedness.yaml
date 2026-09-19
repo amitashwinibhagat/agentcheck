@@ -1,0 +1,39 @@
+name: groundedness
+description: >
+  Does an answer stick to what the sources say? For a RAG agent or any
+  summarizer. Judges the answer text against the provided context.
+verdict: groundedness
+
+checks:
+  - id: supported_by_context
+    type: noul
+    instructions: >
+      Is every factual claim in the answer supported by the provided context?
+      Answer no if any claim is invented or unsupported.
+
+  - id: contradicts_context
+    type: noul
+    instructions: >
+      Does the answer contradict anything the provided context states?
+
+  - id: cites_specifics
+    type: noul
+    instructions: >
+      Where the answer gives numbers, dates, names or policies, do those
+      specifics appear in the context rather than being supplied from elsewhere?
+
+  - id: groundedness
+    type: choice
+    instructions: How should this answer be treated?
+    criteria:
+      use: fully grounded in the sources, safe to use
+      verify: mostly grounded but has a claim someone should check
+      reject: contains unsupported or contradicted claims, do not use
+
+  - id: hallucination_risk
+    type: score
+    instructions: How much invented content does the answer contain?
+    criteria:
+      - none: everything traceable to the context
+      - some: a detail or two with no source
+      - high: material claims with no source

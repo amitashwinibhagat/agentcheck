@@ -1,0 +1,351 @@
+/* AgentCheck — Flight Strip Board
+   A triage ledger. Warm charcoal board, cream card stock, hue spent only on
+   verdict. See .impeccable/surfaces/agentcheck-web.md for the direction. */
+
+:root{
+  --board:#14120f; --board2:#1d1a16; --bay:#26221b;
+  --card:#f0eade; --card2:#e6dfd0; --cardline:#cfc5ae;
+  --ink:#16140f; --ink2:#6f6a5c;
+  --text:#e8e2d4; --text-dim:#9b9483; --rule:#2e2a23; --rule2:#3a352c;
+  --flag:#a63a24; --review:#8a5a12; --pass:#4a4741;
+  --flag-lip:#e0705a; --review-lip:#d9a44b;
+  --focus:#e8b45a;
+  --mono:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --ui:Archivo,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --gut:34px;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:var(--board); color:var(--text);
+  font:400 13px/1.45 var(--ui);
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.skip{position:absolute;left:-999px}
+.skip:focus{left:12px;top:12px;z-index:60;background:var(--card);color:var(--ink);padding:8px 14px;border-radius:2px}
+
+/* ---------- shell ---------- */
+/* The `hidden` attribute must always win. Any later rule that sets `display`
+   on the same element silently overrides it — which is exactly how the dock
+   (display:flex) stayed visible as a 36px ghost row on every non-queue view,
+   and how the ledger grid grew a third row. Per-element patches were added
+   for .banner and .sheet before this; this one rule replaces that whack-a-mole. */
+[hidden]{display:none!important}
+
+.shell{height:100%;display:grid;grid-template-columns:1fr 424px;grid-template-rows:auto 1fr;overflow:hidden}
+.shell.wide{grid-template-columns:1fr}
+.head{grid-column:1/-1;display:grid;grid-template-columns:1fr auto;align-items:end;gap:26px;
+  padding:20px var(--gut) 16px;border-bottom:1px solid var(--rule);min-width:0}
+.mark{font:700 15px/1 var(--ui);letter-spacing:-.01em}
+.mark span{color:var(--text-dim);font-weight:400;font-size:12px;margin-left:10px;letter-spacing:0}
+
+.counts{display:flex;gap:30px;margin-top:22px;align-items:flex-end}
+.count{display:flex;flex-direction:column;gap:11px;background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.nav{display:inline-flex;gap:2px;margin-left:18px;vertical-align:middle}
+.nav button{background:none;border:0;color:var(--text-dim);font:400 12px/1 var(--ui);
+  padding:6px 10px;border-radius:2px;cursor:pointer}
+.nav button:hover{color:var(--text)}
+.nav button.on{background:var(--bay);color:var(--text)}
+.panel-head{padding:22px var(--gut) 14px;border-bottom:1px solid var(--rule);max-width:60rem}
+.panel-head h1{font:600 22px/1.2 var(--ui);letter-spacing:-.02em;margin:0 0 8px}
+.panel-head .lede{margin:0 0 14px;color:var(--text-dim);font-size:13px;line-height:1.55}
+select{background:#12100d;border:1px solid var(--rule);border-radius:2px;color:var(--text);
+  font:400 12px/1 var(--ui);padding:9px 11px;min-width:220px}
+select:focus{border-color:var(--text-dim);outline:none}
+.bars{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.bar-row{display:grid;grid-template-columns:132px 1fr 62px 58px 62px 78px;align-items:center;
+  gap:12px;padding:7px 0;border-bottom:1px solid #221f19;font-size:12px}
+.bar-row.head{border-bottom:1px solid var(--rule);color:var(--text-dim);
+  font:400 9.5px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase}
+/* "SIGNED OUT" needed ~78px in a 64px column, so the header wrapped onto two
+   lines while its values stayed on one. Widen the column and forbid the wrap. */
+.bar-row.head span{white-space:nowrap}
+.stack{display:flex;height:9px;border-radius:2px;overflow:hidden;background:var(--bay)}
+.stack i{display:block;height:100%}
+.stack .s-fail{background:var(--flag)}
+.stack .s-rev{background:var(--review)}
+.stack .s-pass{background:#4a4741}
+.spark{height:9px;background:var(--bay);border-radius:2px;overflow:hidden}
+.spark i{display:block;height:100%;background:#8d8776}
+.pill{display:inline-block;font:500 11px/1 var(--ui);letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 8px;border-radius:2px;background:var(--bay);color:var(--text-dim);
+  white-space:nowrap}
+.pill.good{color:#93b07d}.pill.warn{color:#e0a44b}.pill.bad{color:#f0b3a5}
+.callout{margin:16px 0;padding:12px 14px;border-radius:2px;background:var(--bay);
+  border:1px solid var(--rule2);font-size:13px;line-height:1.5}
+.callout.warn{border-color:var(--review)}
+.callout.bad{border-color:var(--flag)}
+.callout.good{border-color:#4a7a5c}
+.rubric{border:1px solid var(--rule);border-radius:2px;margin:0 0 8px;background:var(--board2)}
+.rubric > button{width:100%;text-align:left;background:none;border:0;color:inherit;
+  font:inherit;padding:13px 15px;cursor:pointer;display:flex;align-items:center;gap:12px}
+.rubric > button:hover{background:#221f18}
+.rubric .meta{margin-left:auto;font:400 11px/1 var(--mono);color:var(--text-dim)}
+.rubric .body{padding:0 15px 14px;font-size:12.5px;color:var(--text-dim)}
+.rubric .q{display:grid;grid-template-columns:170px 64px 1fr;gap:12px;padding:7px 0;
+  border-top:1px solid #221f19;font-size:12px}
+.rubric .q code{font-family:var(--mono);color:var(--text)}
+.rubric .q em{font-style:normal;color:var(--text-dim);font-size:10px;
+  letter-spacing:.08em;text-transform:uppercase}
+.crit{font-family:var(--mono);font-size:12px;color:var(--text-dim)}
+.metric-row{display:grid;grid-template-columns:190px 1fr 70px 70px;gap:12px;align-items:center;
+  padding:7px 0;border-bottom:1px solid #221f19;font-size:12px}
+.metric-row.head{border-bottom:1px solid var(--rule);color:var(--text-dim);
+  font:400 9.5px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase}
+.count b{font:600 52px/.82 var(--mono);letter-spacing:-.055em;color:var(--text);transition:color .15s}
+.count i{font:400 11px/1 var(--ui);font-style:normal;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)}
+.count:hover b{color:#fff}
+.count.flag b{color:var(--flag-lip)}
+.count.rev b{color:var(--review-lip)}
+.count.on b{color:#fff}
+.count.on i{color:var(--text)}
+
+.tools{display:flex;align-items:center;gap:10px;justify-self:end;padding-bottom:4px;min-width:0;flex-wrap:wrap}
+
+/* One size for every header control. Previously each rule set its own padding
+   and font, so the row came out 27/30/30/30/32px tall on two different centre
+   lines (a 5px stagger), which is what read as "misaligned". Fixing the height
+   and zeroing the margins makes them share a centre whatever the element is. */
+.tools > *{
+  box-sizing:border-box;
+  height:30px;
+  margin:0;
+  padding-top:0;
+  padding-bottom:0;
+  display:inline-flex;
+  align-items:center;
+  font-size:12px;
+  line-height:1;
+  white-space:nowrap;
+}
+.tools .btn{padding-left:15px;padding-right:15px}
+.tools .search,.tools .usage-pill{padding-left:12px;padding-right:12px}
+.seg{display:flex;border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+.seg button{background:none;border:0;border-left:1px solid var(--rule);color:var(--text-dim);
+  font:400 11.5px/1 var(--ui);padding:8px 14px;cursor:pointer}
+.seg button:first-child{border-left:0}
+.seg button[aria-pressed="true"]{background:var(--card);color:var(--ink);font-weight:600}
+.seg button:hover:not([aria-pressed="true"]){color:var(--text)}
+.btn{background:var(--card);color:var(--ink);border:0;border-radius:2px;font:600 12px/1 var(--ui);
+  padding:9px 15px;cursor:pointer;box-sizing:border-box}
+.btn:hover{background:#fff}
+.btn.ghost{background:transparent;color:var(--text-dim);border:1px solid var(--rule2)}
+.btn.ghost:hover{color:var(--text);border-color:var(--text-dim)}
+.search{background:transparent;border:1px solid var(--rule);border-radius:2px;color:var(--text);
+  font:400 12px/1 var(--ui);padding:8px 12px;width:190px;box-sizing:border-box}
+.search::placeholder{color:var(--text-dim)}
+.search:focus{border-color:var(--text-dim);outline:none}
+
+/* ---------- ledger ---------- */
+.ledger{overflow-y:auto;overflow-x:hidden}
+.hintline{padding:12px var(--gut) 0;font:400 12px/1 var(--ui);color:var(--text-dim);letter-spacing:.02em}
+.rows{padding:8px var(--gut) 60px}
+.row{width:100%;display:grid;align-items:center;
+  grid-template-columns:4px 108px minmax(0,1fr) 128px 62px 92px 26px;
+  gap:0 16px;padding:11px 0;border:0;border-bottom:1px solid #221f19;
+  background:none;font:inherit;color:inherit;text-align:left;cursor:pointer}
+.row:hover{background:#191612}
+.row[aria-selected="true"]{background:#1f1b15}
+.band{width:4px;height:36px;border-radius:1px;background:var(--pass)}
+.row[data-v="fail"] .band{background:var(--flag)}
+.row[data-v="review"] .band{background:var(--review)}
+.sign{font:500 10.5px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;
+  color:#ddd6c6;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sign i{display:block;font:400 10px/1 var(--ui);font-style:normal;letter-spacing:.02em;
+  text-transform:none;color:var(--text-dim);margin-top:6px}
+.what{min-width:0}
+.what b{display:block;font:400 13px/1.35 var(--ui);color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.what small{display:block;font:400 10.5px/1 var(--mono);color:var(--text-dim);margin-top:6px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track{height:5px;background:#2a2620;border-radius:3px;overflow:hidden}
+.track i{display:block;height:100%;background:#8d8776;border-radius:3px}
+.row[data-v="fail"] .track i{background:var(--flag)}
+.row[data-v="review"] .track i{background:var(--review)}
+.trust{font:600 15px/1 var(--mono);text-align:right;letter-spacing:-.02em;color:var(--text)}
+.state{font:500 11px/1.35 var(--ui);letter-spacing:.12em;text-transform:uppercase;
+  text-align:right;color:var(--text-dim);white-space:nowrap}
+.state.out{color:#93b07d}
+.kill{background:none;border:0;color:#4a463c;font:400 15px/1 var(--ui);cursor:pointer;
+  padding:2px;border-radius:2px}
+.row:hover .kill{color:var(--text-dim)}
+.kill:hover{color:var(--flag-lip)}
+
+/* empty + errors */
+.empty{padding:44px var(--gut);max-width:560px}
+.empty h2{font:600 19px/1.25 var(--ui);letter-spacing:-.02em;margin:0 0 10px}
+.empty p{margin:0 0 18px;color:var(--text-dim);font-size:13px}
+.doors{display:flex;gap:9px;flex-wrap:wrap}
+.usage-pill{font:400 11px/1 var(--mono);color:var(--text-dim);border:1px solid var(--rule);
+  border-radius:999px;padding:7px 12px;white-space:nowrap;box-sizing:border-box}
+.usage-pill.low{color:#f0b3a5;border-color:var(--flag)}
+.checklist{list-style:none;margin:0 0 6px;padding:0;display:flex;flex-direction:column;gap:12px}
+.checklist li{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--text-dim)}
+.checklist .step{font-weight:600;color:var(--text);white-space:nowrap}
+.checklist .btn{flex:none}
+.banner{margin:10px var(--gut) 0;padding:11px 13px;border:1px solid var(--flag);
+  border-radius:2px;color:#f0b3a5;font-size:12.5px;background:#1e1512}
+.load{color:var(--text-dim);padding:24px var(--gut);font-size:12.5px}
+
+/* ---------- dock ---------- */
+.dock{border-left:1px solid var(--rule);background:var(--board2);
+  display:flex;flex-direction:column;overflow:hidden}
+.dock-in{padding:18px 20px;display:flex;flex-direction:column;gap:14px;height:100%;overflow-y:auto}
+.kicker{font:400 11px/1 var(--ui);letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim)}
+.paper{background:var(--card);color:var(--ink);border-radius:2px;padding:15px;
+  box-shadow:0 12px 34px rgba(0,0,0,.55);display:flex;flex-direction:column;flex:1;min-height:0;overflow-y:auto}
+.verdict{display:inline-block;align-self:flex-start;font:600 10px/1 var(--ui);letter-spacing:.12em;
+  text-transform:uppercase;color:#fff;background:var(--flag);padding:5px 9px;border-radius:2px}
+.verdict.pass{background:var(--pass)} .verdict.review{background:var(--review)}
+.paper h3{font:600 20px/1.2 var(--ui);letter-spacing:-.025em;margin:13px 0 7px}
+.paper .reason{font-size:12.5px;line-height:1.5;color:#3f3b32;margin:0}
+.paper dl{display:grid;grid-template-columns:88px 1fr;gap:5px 10px;margin:10px 0 0}
+.paper dt{font:400 10px/1.4 var(--ui);letter-spacing:.1em;text-transform:uppercase;color:var(--ink2)}
+.paper dd{margin:0;font:400 11.5px/1.45 var(--mono);word-break:break-word}
+.mono{background:#1a1712;color:#d8d2c2;border-radius:2px;padding:10px 11px;
+  font:400 11px/1.55 var(--mono);white-space:pre-wrap;word-break:break-word;margin:10px 0 0}
+.checks{margin-top:12px;border-top:1px solid var(--cardline)}
+.chk{display:grid;grid-template-columns:1fr auto;gap:12px;padding:6px 0;
+  border-bottom:1px solid var(--cardline);font-size:11.5px}
+.chk b{font:600 11px/1.3 var(--ui);letter-spacing:.05em;text-transform:uppercase;text-align:right}
+.chk b.no{color:var(--flag)} .chk b.ok{color:#2f5a3c}
+/* A dock row, NOT a button. This class used to be `.ghost`, which also
+   matched every `.btn.ghost` (14 of them): those buttons silently inherited a
+   dashed border, `display:grid`, 8px/10px padding, an 11.5px font and
+   margin-top:10px. Centring aligns margin boxes, so that 10px top margin
+   dropped exactly the ghost buttons in the header 5px below the rest.
+   Renamed so "ghost button" and "ghost row" cannot collide again. */
+.ghost-row{border:1px dashed #b8ae98;border-radius:2px;padding:8px 10px;display:grid;
+  grid-template-columns:1fr auto;gap:12px;font-size:11.5px;color:#857d6c;margin-top:10px}
+.signoff{display:flex;gap:8px;padding-top:14px;flex:none;margin-top:auto}
+.signoff .btn{flex:1;text-align:center;display:flex;align-items:center;justify-content:center;min-height:46px;padding:9px 12px}
+.signoff .btn:first-child{flex:1.35}
+.signoff .btn[aria-pressed="true"]{background:var(--flag);color:#fff}
+.signoff .btn.ghost[aria-pressed="true"]{background:transparent;border-color:var(--cardline);color:var(--ink)}
+.note{font:400 12px/1.5 var(--ui);color:var(--text-dim);margin:0}
+.dock .empty-dock{margin:auto;text-align:center;padding:0 30px}
+.dock .empty-dock p{color:var(--text-dim);font-size:12.5px;line-height:1.55;margin:0}
+
+/* ---------- sheet ---------- */
+.sheet{position:fixed;inset:0;z-index:50;display:grid;place-items:center;
+  background:rgba(10,9,7,.72);padding:34px}
+.sheet-in{background:var(--board2);border:2px solid var(--rule2);border-radius:3px;
+  width:min(1080px,100%);max-height:88vh;display:flex;flex-direction:column;
+  box-shadow:0 10px 24px rgba(0,0,0,.55)}
+.sheet-head{display:flex;align-items:flex-start;gap:18px;padding:20px 24px 16px;
+  border-bottom:1px solid var(--rule)}
+.sheet-head h2{font:600 19px/1.2 var(--ui);letter-spacing:-.02em;margin:0 0 6px}
+.sheet-head p{margin:0;color:var(--text-dim);font-size:12.5px;max-width:62ch;line-height:1.5}
+.sheet-body{padding:20px 24px 24px;overflow-y:auto}
+.x{margin-left:auto;background:none;border:1px solid var(--rule2);border-radius:2px;
+  color:var(--text-dim);font:400 15px/1 var(--ui);padding:6px 11px;cursor:pointer}
+.x:hover{color:var(--text)}
+.field{margin-bottom:16px}
+.field label{display:block;font:400 11px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--text-dim);margin-bottom:8px}
+.field textarea,.field input[type=text]{width:100%;background:#12100d;border:1px solid var(--rule);
+  border-radius:2px;color:var(--text);font:400 11.5px/1.6 var(--mono);padding:11px 12px;resize:vertical}
+.field textarea:focus,.field input[type=text]:focus{border-color:var(--text-dim);outline:none}
+.file{display:flex;align-items:center;gap:12px;font-size:12px;color:var(--text-dim)}
+.file input[type=file]{font:400 12px var(--ui);color:var(--text-dim)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(232px,1fr));gap:8px}
+.card{position:relative;background:var(--card);color:var(--ink);border:0;border-radius:2px;
+  padding:12px 12px 12px 16px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:5px;
+  box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.card:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:2px 0 0 2px;background:var(--pass)}
+.card[data-v="fail"]:before{background:var(--flag)}
+.card[data-v="review"]:before{background:var(--review)}
+.card:hover{background:#fff}
+.card em{font:500 9.5px/1 var(--ui);font-style:normal;letter-spacing:.13em;text-transform:uppercase;color:var(--ink2)}
+.card b{font:600 12.5px/1.3 var(--ui);letter-spacing:-.01em}
+.card span{font-size:11.5px;line-height:1.4;color:#5b564a}
+.snippet{background:#12100d;border:1px solid var(--rule);border-radius:2px;color:#d8d2c2;
+  font:400 11px/1.65 var(--mono);padding:13px 14px;white-space:pre-wrap;word-break:break-all;margin:0}
+.rowline{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.counts-line{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 0;font:400 12px/1 var(--ui);color:var(--text-dim)}
+.counts-line b{color:var(--text);font-family:var(--mono);font-weight:600}
+.table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12px}
+.table th{text-align:left;font:400 9.5px/1 var(--ui);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--text-dim);padding:8px 10px 8px 0;border-bottom:1px solid var(--rule);
+  white-space:nowrap}
+.table td{padding:9px 10px 9px 0;border-bottom:1px solid #221f19;vertical-align:top}
+.table code{font-family:var(--mono);font-size:11px}
+.table .v{font-weight:600}
+.table .v.fail{color:var(--flag-lip)} .table .v.review{color:var(--review-lip)}
+
+/* ---------- responsive ---------- */
+.back{display:none}
+@media (max-width:1080px){
+  .shell{grid-template-columns:1fr}
+  /* Seven tabs do not fit a phone. They used to overflow and clip the last
+     one ("Trust Under Attack") off the edge. Wrap onto more rows instead. */
+  .nav{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:4px;width:100%}
+  .nav button{flex:1 1 auto;min-width:0;text-align:center}
+  /* 96px wrapped "Confidence spread"; its siblings fit, so the column
+     looked ragged. 112px fits every label on one line. */
+  .bar-row{grid-template-columns:112px 1fr 52px 62px;gap:8px;font-size:11.5px}
+  .bar-row > :nth-child(4),.bar-row > :nth-child(6){display:none}
+  .metric-row{grid-template-columns:1fr 70px;gap:8px}
+  .metric-row > :nth-child(2){display:none}
+  .rubric .q{grid-template-columns:1fr;gap:4px}
+  .head{grid-template-columns:1fr;align-items:start;gap:16px;padding:16px 18px 14px}
+  .head > div{min-width:0}
+  .tools{justify-self:stretch;justify-content:flex-start;padding-bottom:0}
+  .search{width:100%;order:-1}
+  .tools .btn{flex:1 1 auto;min-width:calc(50% - 10px);text-align:center}
+  .dock{position:fixed;inset:0;z-index:40;border-left:0;transform:translateX(100%);
+    transition:transform .22s cubic-bezier(.25,1,.5,1)}
+  .dock.open{transform:none}
+  .back{display:inline-flex}
+  :root{--gut:18px}
+  .row{grid-template-columns:4px 84px minmax(0,1fr) 52px 24px;gap:0 12px}
+  .row .track,.row .state{display:none}
+  .count b{font-size:38px}
+  /* 2x2, not 4x1: four columns left ~85px each, so "CALLS CHECKED" wrapped
+     to two lines while "FLAGGED" stayed on one, and the row looked ragged. */
+  .counts{display:grid;grid-template-columns:repeat(2,1fr);gap:14px 18px;margin-top:16px}
+}
+@media (prefers-reduced-motion:reduce){
+  .dock{transition:none}
+}
+
+/* ── trust ────────────────────────────────────────────────────────── */
+.trust-hero{display:flex;align-items:center;gap:18px;margin-bottom:10px}
+.trust-score{font:700 64px/1 var(--mono);letter-spacing:-.04em}
+
+#live-toggle.on{border-color:var(--pass);color:var(--pass)}
+#live-toggle.on:before{content:"● ";font-size:9px}
+
+/* run strip: one agent run, oldest step first */
+.runstrip{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
+.rdot{width:26px;height:26px;border-radius:50%;border:1px solid var(--line,#3a372f);
+  background:transparent;color:inherit;font:600 11px/1 var(--ui,inherit);cursor:pointer}
+.rdot.v-pass{border-color:var(--pass)} .rdot.v-review{border-color:var(--review)}
+.rdot.v-fail{border-color:var(--flag);color:var(--flag-lip)}
+.rdot.here{background:var(--pass);color:#fff;border-color:var(--pass)}
+.rdot.v-review.here{background:var(--review)} .rdot.v-fail.here{background:var(--flag)}
+
+/* runs: the trace explorer */
+.runsplit{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:0}
+@media (max-width:900px){.runsplit{grid-template-columns:1fr}}
+.runsplit #run-list{border-right:1px solid var(--line,#3a372f)}
+/* Runs rows are their own grid. Reusing the queue's 7 columns left ~120px for
+   the tool path (hence "search_inbox →…"), plus a confidence bar that meant
+   nothing for a run and the step count printed twice. */
+.runrow{width:100%;grid-template-columns:4px 74px minmax(0,1fr) 92px}
+.runrow[aria-selected="true"]{background:rgba(255,255,255,.05)}
+#run-detail{padding:0 0 40px}
+#run-detail .paper{margin-top:6px}
+.steprow{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line,#3a372f)}
+.steprow:first-child{border-top:0}
+.stepno{flex:0 0 26px;height:26px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font:600 11px/1 var(--ui,inherit);border:1px solid var(--line,#3a372f)}
+.stepno.v-pass{border-color:var(--pass)} .stepno.v-review{border-color:var(--review);color:var(--review)}
+.stepno.v-fail{border-color:var(--flag);color:var(--flag-lip)}
+.stepbody{min-width:0;flex:1}
+.stephead{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:4px}
+.pill.dec-approve{border-color:var(--pass)} .pill.dec-human{border-color:var(--review);color:var(--review)}
+.pill.dec-block{border-color:var(--flag);color:var(--flag-lip)}
+.stepbody .mono{margin-top:6px;max-height:150px;overflow:auto}

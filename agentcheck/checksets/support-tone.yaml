@@ -1,0 +1,26 @@
+name: support-tone
+description: >
+  Is a drafted support reply on-brand and useful? Shows a rubric with only a
+  verdict and no severity, which is valid.
+verdict: quality
+
+checks:
+  - id: answers_question
+    type: noul
+    instructions: >
+      Does the reply actually answer the question the customer asked, rather
+      than restating it or pointing at a help centre?
+
+  - id: no_false_promise
+    type: noul
+    instructions: >
+      Does the reply avoid promising something the product cannot do, such as a
+      specific delivery date, a refund outside policy, or a roadmap commitment?
+
+  - id: quality
+    type: choice
+    instructions: How should this draft be handled?
+    criteria:
+      send: it is accurate and on-brand, send as-is
+      edit: fixable, a human should tidy it first
+      rewrite: the tone or the substance is wrong, do not send

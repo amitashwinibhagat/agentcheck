@@ -1,0 +1,15 @@
+# Decision policy: what happens to each judged call.
+# Observe-and-recommend: the decision is returned and logged, but nothing
+# is actioned unless the caller passes enforce=true.
+name: refund-safety
+rubric: refund-policy
+rules:
+  - if: "verdict == fail"
+    then: block
+  - if: "verdict == review"
+    then: human
+  - if: "confidence < 0.6"
+    then: human
+  - if: "severity >= 2"
+    then: human
+default: approve
