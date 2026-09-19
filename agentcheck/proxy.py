@@ -211,115 +211,7 @@ def create_app(store: Store, default_judge: str = "typesafe",
     routes.workspace.register(app, store)
 
     # ── identity: login, sessions, membership binding ──────────────────
-
-    def _base_url(request: Request) -> str:
-        """Public base URL for redirect URIs. Behind a proxy the request URL
-        is the internal one, so an explicit setting wins."""
-        base = (os.environ.get("AGENTCHECK_BASE_URL") or "").rstrip("/")
-        if base:
-            return base
-        scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
-        host = request.headers.get("host") or request.url.netloc
-        return f"{scheme}://{host}"
-
-    def _set_session_cookie(response: Response, request: Request, token: str,
-                            max_age: int) -> None:
-        secure = (_base_url(request).startswith("https")
-                  or request.url.scheme == "https")
-        response.set_cookie(auth.SESSION_COOKIE, token, max_age=max_age,
-                            httponly=True, samesite="lax", secure=secure,
-                            path="/")
-
-    def _current_user(request: Request) -> dict | None:
-        """The signed-in person, or None. Expired sessions are refused and
-        cleared, so a stale cookie cannot act."""
-        token = request.cookies.get(auth.SESSION_COOKIE)
-        if not token:
-            return None
-        rec = store.session_by_token(token)
-        ok, _reason = auth.session_usable(rec or {})
-        if not ok:
-            return None
-        store.touch_session(token)
-        return store.user(rec["user_id"])
-
-    @app.get("/v1/auth/login")
-    async def auth_login(request: Request, next: str = "/"):
-        """Start a login: signed state in a cookie, then redirect out."""
-        if not idp.configured():
-            raise HTTPException(
-                503, "login is not configured on this deployment")
-        try:
-            # the return path is signed INTO the state, so the callback never
-            # trusts a client-supplied redirect target
-            state = auth.sign_state(uuid.uuid4().hex, next_path=next)
-            url = idp.authorize_url(
-                f"{_base_url(request)}/v1/auth/callback", state)
-        except auth.AuthError as e:
-            raise HTTPException(503, str(e)) from None
-        resp = RedirectResponse(url, status_code=302)
-        resp.set_cookie(auth.STATE_COOKIE, state, max_age=auth.STATE_TTL_SECONDS,
-                        httponly=True, samesite="lax",
-                        secure=_base_url(request).startswith("https"),
-                        path="/")
-        return resp
-
-    @app.get("/v1/auth/callback")
-    async def auth_callback(request: Request, code: str | None = None,
-                            state: str | None = None, error: str | None = None):
-        """Finish a login. Verifies state BEFORE exchanging the code."""
-        if error:
-            raise HTTPException(400, f"provider returned an error: {error}")
-        if not code:
-            raise HTTPException(400, "missing code")
-        expected = request.cookies.get(auth.STATE_COOKIE)
-        payload = auth.verify_state(state) if state else None
-        if not payload or not expected or state != expected:
-            raise HTTPException(400, "invalid or expired login state")
-        try:
-            profile = idp.exchange(code, f"{_base_url(request)}/v1/auth/callback")
-        except auth.AuthError as e:
-            raise HTTPException(502, str(e)) from None
-        user = store.upsert_user(idp.name, profile["provider_user_id"],
-                                 profile["email"], profile.get("name"))
-        # Two ways a membership can be waiting: an unclaimed member row, or a
-        # pending INVITE (which lives in another table and used to be dropped
-        # here — an invited person would sign in and still not be a member).
-        claimed = store.bind_memberships(profile["email"], user["id"])
-        invited = store.claim_invites(profile["email"], user["id"])
-        store.record_event(user["id"], "login",
-                           {"provider": idp.name, "claimed": claimed,
-                            "invites_claimed": len(invited)})
-        session = auth.new_session(user["id"])
-        store.create_session(session)
-        resp = RedirectResponse(payload["next"], status_code=302)
-        _set_session_cookie(resp, request, session["token"],
-                            auth.SESSION_TTL_SECONDS)
-        resp.delete_cookie(auth.STATE_COOKIE, path="/")
-        return resp
-
-    @app.get("/v1/auth/me")
-    async def auth_me(request: Request):
-        """Who am I, and which workspaces do I belong to."""
-        user = _current_user(request)
-        if user is None:
-            return {"authenticated": False, "provider": idp.name}
-        rows = store.workspaces_for_user(user["id"])
-        return {"authenticated": True, "provider": idp.name,
-                "user": {"id": user["id"], "email": user["email"],
-                         "name": user["name"]},
-                "workspaces": [{"id": w["id"], "name": w["name"],
-                                "role": w.get("role"), "plan": w["plan"]}
-                               for w in rows]}
-
-    @app.post("/v1/auth/logout")
-    async def auth_logout(request: Request):
-        token = request.cookies.get(auth.SESSION_COOKIE)
-        removed = store.delete_session(token) if token else False
-        resp = Response(content='{"logged_out": true}',
-                        media_type="application/json")
-        resp.delete_cookie(auth.SESSION_COOKIE, path="/")
-        return resp if removed else resp
+    routes.auth.register(app, store, idp)
 
     routes.workspaces.register(app, store)
 
@@ -713,7 +605,8 @@ def create_app(store: Store, default_judge: str = "typesafe",
         return {"key": minted, "name": req.name, "qpm_limit": req.qpm,
                 "monthly_allowance": req.allowance, "plan": plan}
 
-    mount_web(app, store, _authorize)
+    mount_web(app)
+    routes.results.register(app, store)
     return app
 
 
