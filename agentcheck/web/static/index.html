@@ -23,10 +23,8 @@
           <button type="button" class="on" data-view="queue">Decision Log</button>
           <button type="button" data-view="runs">Runs</button>
           <button type="button" data-view="rubrics">Rubrics</button>
-          <button type="button" data-view="trust">Trust</button>
           <button type="button" data-view="policies">Policies</button>
-          <button type="button" data-view="monitor">Trust Report</button>
-          <button type="button" data-view="redteam">Trust Under Attack</button>
+          <button type="button" data-view="trust">Trust</button>
         </nav>
       </div>
       <div class="counts" id="counts" role="group" aria-label="Filter by verdict">
@@ -93,23 +91,6 @@
       <div id="rubric-detail"></div>
     </section>
 
-    <section id="view-monitor" hidden>
-      <div class="panel-head">
-        <h1>Trust Report</h1>
-        <p class="lede">Judgment volume, verdict mix and confidence over time. Drift compares the
-        newer half of the window against the older.</p>
-        <div class="rowline">
-          <div class="seg" role="group" aria-label="Bucket size">
-            <button type="button" data-bucket="hour">Hour</button>
-            <button type="button" data-bucket="day" class="on">Day</button>
-            <button type="button" data-bucket="week">Week</button>
-          </div>
-          <button type="button" class="btn ghost" id="run-drift">Check drift</button>
-        </div>
-      </div>
-      <div id="monitor-out"></div>
-    </section>
-
     <section id="view-trust" hidden>
       <div class="panel-head">
         <h1>Trust</h1>
@@ -117,12 +98,45 @@
         behavior, not asserted. A judge that always says 0.9 is not discriminating, whatever
         its accuracy. The score is only as good as its sample: n is always shown.</p>
         <div class="rowline">
+          <div class="seg" role="group" aria-label="Trust view">
+            <button type="button" data-trusttab="score" aria-pressed="true">Score</button>
+            <button type="button" data-trusttab="report" aria-pressed="false">Over time</button>
+            <button type="button" data-trusttab="attack" aria-pressed="false">Under attack</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="trust-panel-score">
+        <div class="rowline" style="padding:0 var(--gut)">
           <select id="trust-checkset" aria-label="Rubric"></select>
           <button type="button" class="btn" id="trust-refresh">Recompute</button>
           <span class="note" id="trust-status" aria-live="polite"></span>
         </div>
+        <div id="trust-out"></div>
       </div>
-      <div id="trust-out"></div>
+
+      <div id="trust-panel-report" hidden>
+        <div class="rowline" style="padding:0 var(--gut)">
+          <div class="seg" role="group" aria-label="Bucket size">
+            <button type="button" data-bucket="hour" aria-pressed="false">Hour</button>
+            <button type="button" data-bucket="day" aria-pressed="true">Day</button>
+            <button type="button" data-bucket="week" aria-pressed="false">Week</button>
+          </div>
+          <button type="button" class="btn ghost" id="run-drift">Check drift</button>
+        </div>
+        <div id="monitor-out"></div>
+      </div>
+
+      <div id="trust-panel-attack" hidden>
+        <div class="rowline" style="padding:0 var(--gut)">
+          <select id="rt-checkset" aria-label="Rubric"></select>
+          <select id="rt-families" aria-label="Attack families"></select>
+          <button type="button" class="btn" id="run-redteam">Run the suite</button>
+          <span class="note" id="rt-status" aria-live="polite"></span>
+        </div>
+        <p class="hint" id="rt-cost" style="padding:6px var(--gut) 0"></p>
+        <div id="redteam-out"></div>
+      </div>
     </section>
 
     <section id="view-policies" hidden>
@@ -133,23 +147,6 @@
         observe-and-recommend: decisions are returned and logged, never actioned.</p>
       </div>
       <div id="policies-out"></div>
-    </section>
-
-    <section id="view-redteam" hidden>
-      <div class="panel-head">
-        <h1>Trust Under Attack</h1>
-        <p class="lede">Adversarial tool calls a good rubric must flag. Attack success rate is the
-        share that came back <em>pass</em>. These cases are designed to be unambiguous, so any
-        non-zero rate is a finding.</p>
-        <div class="rowline">
-          <select id="rt-checkset" aria-label="Rubric"></select>
-          <select id="rt-families" aria-label="Attack families"></select>
-          <button type="button" class="btn" id="run-redteam">Run the suite</button>
-          <span class="note" id="rt-status" aria-live="polite"></span>
-        </div>
-        <p class="hint" id="rt-cost"></p>
-      </div>
-      <div id="redteam-out"></div>
     </section>
   </main>
 

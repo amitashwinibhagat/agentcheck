@@ -34,14 +34,28 @@ const SUBTITLE = {
   queue: "the decision log",
   runs: "what the agent did, in order",
   rubrics: "what the judge is asked",
-  trust: "measured, not asserted",
   policies: "what happens next",
-  monitor: "the report on trust",
-  redteam: "trust under attack",
+  trust: "measured, not asserted",
 };
 
+// The three trust surfaces are nested under one tab. Three top-level tabs all
+// beginning with "Trust" made the product's central concept the hardest thing
+// to find; the score, its history, and its adversarial result are one story.
+const TRUST_TABS = ["score", "report", "attack"];
+let trustTab = "score";
+
+function setTrustTab(name) {
+  trustTab = name;
+  TRUST_TABS.forEach((t) => { $("trust-panel-" + t).hidden = t !== name; });
+  document.querySelectorAll("[data-trusttab]").forEach((b) =>
+    b.setAttribute("aria-pressed", String(b.dataset.trusttab === name)));
+  if (name === "score") loadTrust();
+  if (name === "report") loadMonitor();
+  if (name === "attack") renderRedteamIdle();
+}
+
 function setView(name) {
-  ["queue", "runs", "rubrics", "trust", "policies", "monitor", "redteam"].forEach((v) => {
+  ["queue", "runs", "rubrics", "trust", "policies"].forEach((v) => {
     $("view-" + v).hidden = v !== name;
   });
   document.querySelectorAll("#nav button").forEach((b) =>
@@ -51,17 +65,14 @@ function setView(name) {
   // The four big numbers are queue filters. On any other view they describe a
   // different page's contents and pad the header for nothing.
   $("counts").hidden = name !== "queue";
-  // The dock belongs to the queue. On other sections it is dead weight and
-  // an "In hand" panel on the Monitor page just reads as a bug.
+  // The dock belongs to the queue. On other sections it is dead weight.
   const onQueue = name === "queue";
   $("dock").hidden = !onQueue;
   document.querySelector(".shell").classList.toggle("wide", !onQueue);
   if (name === "rubrics") loadRubrics();
   if (name === "runs") loadRuns();
-  if (name === "trust") loadTrust();
   if (name === "policies") loadPolicies();
-  if (name === "monitor") loadMonitor();
-  if (name === "redteam") renderRedteamIdle();
+  if (name === "trust") setTrustTab(trustTab);
 }
 
 const $ = (id) => document.getElementById(id);
@@ -149,6 +160,17 @@ function renderCounts() {
   $("c-pass").textContent = counts.pass ?? 0;
 }
 
+// What the user's own sign-outs have added up to. Reviewing used to change
+// nothing visible, so the third step of the empty state had no payoff; this is
+// the same human-agreement number the Trust view computes, shown where the
+// reviewing happens.
+function signoffStats() {
+  const assessed = results.filter((r) => r.assessment);
+  const agreed = assessed.filter((r) => r.assessment === "looks_correct").length;
+  const missed = assessed.filter((r) => r.assessment === "actual_issue").length;
+  return { assessed: assessed.length, agreed, missed, decided: agreed + missed };
+}
+
 function renderLedger() {
   const box = $("rows");
   if (!counts.total) {
@@ -172,9 +194,14 @@ function renderLedger() {
     return;
   }
   const rows = visible();
-  $("hintline").textContent = rows.length === results.length
+  const s = signoffStats();
+  const tail = s.assessed
+    ? ` · ${s.assessed} signed out`
+      + (s.decided ? `, judge agreed on ${Math.round((s.agreed / s.decided) * 100)}%` : "")
+    : "";
+  $("hintline").textContent = (rows.length === results.length
     ? `${results.length} checked call${results.length === 1 ? "" : "s"} · newest first`
-    : `${rows.length} of ${results.length} shown`;
+    : `${rows.length} of ${results.length} shown`) + tail;
   if (!rows.length) {
     box.innerHTML = `<div class="empty"><p>Nothing matches that filter. <button type="button" class="btn ghost" data-clear>Clear filters</button></p></div>`;
     box.querySelector("[data-clear]").addEventListener("click", () => {
@@ -230,7 +257,7 @@ function renderDock() {
   const box = $("dock-in");
   if (!selected) {
     box.innerHTML = `<div class="empty-dock">
-      <p class="kicker" style="margin-bottom:10px">In hand</p>
+      <p class="kicker" style="margin-bottom:10px">Nothing in hand</p>
       <p>Select a call from the ledger to read its checks and sign it out.<br><br>
       Nothing is executed and nothing is blocked.</p>
     </div>`;
@@ -263,7 +290,15 @@ function renderDock() {
     </div>
     ${low ? `<div class="ghost-row"><span>Low confidence — treat as needs a look, not a decision</span><span>${conf.toFixed(2)}</span></div>` : ""}
     <div id="runstrip"></div>
-    <p class="note" id="assess-note">${r.assessment ? "Saved: " + ASSESS[r.assessment] + ". The machine verdict is unchanged." : "Your assessment is stored separately from the machine verdict."}</p>
+    <p class="note" id="assess-note">${(() => {
+      const s = signoffStats();
+      const tally = s.decided
+        ? ` ${s.assessed} signed out; the judge agreed on ${Math.round((s.agreed / s.decided) * 100)}%.`
+        : (s.assessed ? ` ${s.assessed} signed out.` : "");
+      return r.assessment
+        ? `Saved: ${ASSESS[r.assessment]}. The machine verdict is unchanged.${tally}`
+        : `Your assessment is stored separately from the machine verdict.`;
+    })()}</p>
     <div class="signoff" role="group" aria-label="Your assessment">
       <button type="button" class="btn" data-assess="looks_correct" aria-pressed="${r.assessment === "looks_correct"}">Judgment is right</button>
       <button type="button" class="btn ghost" data-assess="actual_issue" aria-pressed="${r.assessment === "actual_issue"}">Missed something</button>
@@ -890,10 +925,25 @@ function parseDataset(text) {
     return d;
   }
   if (raw.startsWith("{")) {
-    const obj = JSON.parse(raw);
-    return Array.isArray(obj.traces) ? obj.traces : [obj];
+    // One object, or JSONL? A JSONL file whose rows are objects also starts
+    // with `{`, so the single-object path must fall through on failure rather
+    // than swallow the whole multi-line string — which is exactly what the
+    // shipped 3-row sample does.
+    try {
+      const obj = JSON.parse(raw);
+      return Array.isArray(obj.traces) ? obj.traces : [obj];
+    } catch (e) {
+      if (!raw.includes("\n")) throw e;
+    }
   }
-  return raw.split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
+  // JSONL: one object per line, named for the line that fails.
+  const rows = [];
+  raw.split(/\r?\n/).forEach((line, i) => {
+    if (!line.trim()) return;
+    try { rows.push(JSON.parse(line)); }
+    catch { throw new Error(`line ${i + 1}: ${line.trim().slice(0, 40)}`); }
+  });
+  return rows;
 }
 
 async function runUpload() {
@@ -944,9 +994,14 @@ async function runUpload() {
 
 document.querySelectorAll("#nav button").forEach((b) =>
   b.addEventListener("click", () => setView(b.dataset.view)));
+document.querySelectorAll("[data-trusttab]").forEach((b) =>
+  b.addEventListener("click", () => setTrustTab(b.dataset.trusttab)));
 document.querySelectorAll("[data-bucket]").forEach((b) => b.addEventListener("click", () => {
   bucket = b.dataset.bucket;
-  document.querySelectorAll("[data-bucket]").forEach((x) => x.classList.toggle("on", x === b));
+  // aria-pressed, not a bare `.on` class: the active-segment style keys on it,
+  // and the class-only version left the selected bucket visually unselected.
+  document.querySelectorAll("[data-bucket]").forEach((x) =>
+    x.setAttribute("aria-pressed", String(x === b)));
   loadMonitor();
 }));
 $("run-drift").addEventListener("click", loadDrift);
@@ -1025,15 +1080,18 @@ async function boot() {
   }
   renderExamples();
   await loadChecksets();
+  // The origin the page was actually served from. Hardcoding localhost here
+  // told visitors to the deployed host to curl their own laptop.
+  const ORIGIN = location.origin;
   $("snippet").textContent =
-`curl http://127.0.0.1:7373/v1/check \\
+`curl ${ORIGIN}/v1/check \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{"trace":{"request":"Summarize my unread inbox",
               "tool":"search_inbox",
               "args":{"query":"unread"}}}'`;
   $("snippet-batch").textContent =
-`curl http://127.0.0.1:7373/v1/check-batch \\
+`curl ${ORIGIN}/v1/check-batch \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{"traces":[{"request":"…","tool":"…","args":{}}]}'`;
