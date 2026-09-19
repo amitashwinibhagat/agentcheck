@@ -41,14 +41,14 @@ def test_quota_guard_blocks_before_forwarding():
                  input_tokens=10, output_tokens=2, questions=5, server_ms=90.0,
                  cached=0, ok=1)
 
-    from agentcheck.proxy import QuotaGuard
+    from agentcheck.limits import QuotaGuard
     guard = QuotaGuard(store, window=60.0)
     assert guard.allow(k, 3) is True, "5+3 of 8 should still fit"
     assert guard.allow(k, 4) is False, "5+4 exceeds 8 — must block before forwarding"
 
 
 def test_cache_key_is_content_addressed():
-    from agentcheck.proxy import AnswerCache
+    from agentcheck.limits import AnswerCache
     cache = AnswerCache()
     state = {"tool": "x", "args": {"a": 1}}
     qs = [noul("q", "is it fine?")]

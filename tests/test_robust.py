@@ -130,7 +130,7 @@ def test_typesafe_retries_transient_not_permanent():
 
 
 def test_answer_cache_is_lru_bounded():
-    from agentcheck.proxy import AnswerCache
+    from agentcheck.limits import AnswerCache
     c = AnswerCache(max_entries=2)
     qs = [__import__("agentcheck.judges.base", fromlist=["noul"]).noul("q", "x")]
     for i in range(5):
