@@ -2,9 +2,14 @@
 # runbook tells people to create, and it holds the judge key, the WorkOS
 # credentials and the session signing secret.
 .env
-*.env
-!.env.example
 .env.*
+*.env
+# After the excludes, deliberately: git applies these last-match-wins, so a
+# `!.env.example` placed above `.env.*` was itself re-ignored and the template
+# never reached the repo -- `cp .env.example .env` then failed on a fresh
+# clone. The template holds no secrets; only real env files are kept out.
+!.env.example
+!**/.env.example
 deploy/gcp/.env
 
 # Local database and generated reports

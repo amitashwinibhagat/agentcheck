@@ -419,9 +419,13 @@ setup works on any VM.
   SQLite, verified against real Postgres. Multi-machine deployments must use
   this — machines never share a SQLite file.
 - **Billing posture: proxy-metered.** The meter (questions/month, 402
-  collision, plans, trials) already prices judge cost, so Stripe maps plans
-  to allowances rather than metering anything new. Remaining: Stripe keys,
-  price IDs, checkout + webhook.
+  collision, plans, trials) already prices judge cost, so the provider maps
+  plans to allowances rather than metering anything new. **Built and verified
+  against the live Razorpay account** (2026-09-19): checkout creates a real
+  subscription, a signed webhook moves the key between plans, a forged
+  signature is rejected. The plans exist (`AgentCheck Pro` ₹2,999/mo,
+  `AgentCheck Team` ₹9,999/mo) — see `AGENTS.md` "Pending human actions" for the
+  one remaining decision, which is where to expose checkout.
 
 ### History import (keep your tracing, add proof)
 

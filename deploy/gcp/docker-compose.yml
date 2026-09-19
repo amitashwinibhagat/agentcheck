@@ -31,6 +31,14 @@ services:
       WORKOS_API_KEY: ${WORKOS_API_KEY:-}
       # Postgres instead of SQLite: postgresql://user:pw@host/db
       AGENTCHECK_DB_URL: ${AGENTCHECK_DB_URL:-}
+      # Billing. Opt-in via AGENTCHECK_BILLING; credentials alone never arm
+      # it, because a shared account may hold plans for another product.
+      AGENTCHECK_BILLING: ${AGENTCHECK_BILLING:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      RAZORPAY_PLAN_ID_PRO: ${RAZORPAY_PLAN_ID_PRO:-}
+      RAZORPAY_PLAN_ID_TEAM: ${RAZORPAY_PLAN_ID_TEAM:-}
     volumes:
       # Named volume on the VM's persistent disk. Without this, every
       # rebuild starts from an empty database — the mistake we made on Fly.
