@@ -1,5 +1,6 @@
 """Workspace HTTP tests. Uses the stub judge — no network."""
 
+import json
 from pathlib import Path
 import tempfile
 
@@ -283,3 +284,38 @@ def test_catalog_has_at_least_21_and_stub_matches_labels():
     for ex in examples:
         got = classify({"request": ex["request"], "tool": ex["tool"], "args": ex["args"]})
         assert got == ex["expect"], f"{ex['id']}: expected {ex['expect']}, got {got}"
+
+
+def test_published_calibration_upgrades_trust_tier(monkeypatch):
+    """The measured tier must be reachable through the API it is sold on.
+
+    `calibrate --publish` writes calibration.json for the reliability model,
+    but /v1/trust read nothing, so the tier could not leave 'consistency'
+    however many labels were supplied. Wired now; this exercises the path the
+    product uses — publish a report, ask /v1/trust."""
+    client, key, _, store = _client()
+    headers = {"Authorization": f"Bearer {key}"}
+    # Point AGENTCHECK_HOME at the temp store so the published file is found.
+    monkeypatch.setenv("AGENTCHECK_HOME", str(store.path.parent))
+    client.post("/v1/check-batch",
+                json={"traces": [{"request": f"r{i}", "tool": "search_inbox",
+                                  "args": {"q": i}} for i in range(12)]},
+                headers=headers)
+
+    before = client.get("/v1/trust", headers=headers).json()
+    assert before["tier"] == "consistency", before
+
+    # The exact shape `agentcheck calibrate --publish` writes.
+    (store.path.parent / "calibration.json").write_text(json.dumps({
+        "judge": "typesafe", "checkset": "safety", "dataset": "agent-demo",
+        "decided": {"n": 40, "ece": 0.04, "accuracy": 0.91},
+    }))
+
+    after = client.get("/v1/trust", headers=headers).json()
+    assert after["tier"] == "measured", after
+    assert after["dataset"] == "agent-demo"
+    assert after["ece"] == 0.04
+
+    # A calibration for a different rubric must not upgrade this one.
+    other = client.get("/v1/trust?checkset=refund-policy", headers=headers).json()
+    assert other["tier"] == "consistency", other

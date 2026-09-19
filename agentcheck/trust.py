@@ -85,6 +85,31 @@ def abstention_rate(rows, gate=0.6):
     return sum(1 for c in confs if c < gate) / len(rows)
 
 
+def dataset_report_from_calibration(report):
+    """Adapt a `calibrate` report to the shape ``trust_score`` expects.
+
+    The producer (``calibration.calibration``) nests the numbers under
+    ``decided``; ``trust_score`` reads them at the top level. Nothing bridged
+    the two, so the measured tier was unreachable from the API even though it
+    passed its own unit test — that test hand-built the flat shape no producer
+    ever emits. Returning None for a report without decided numbers keeps a
+    thin or failed calibration from silently upgrading the tier.
+    """
+    if not report:
+        return None
+    dec = report.get("decided") or {}
+    if dec.get("ece") is None or dec.get("accuracy") is None:
+        return None
+    return {
+        "ece": dec.get("ece"),
+        "accuracy": dec.get("accuracy"),
+        "decided": dec.get("n") or 0,
+        "checkset": report.get("checkset"),
+        "dataset": report.get("dataset"),
+        "judge": report.get("judge"),
+    }
+
+
 def trust_score(rows, gate=0.6, dataset_report=None, adversarial=None):
     """Compute the Trust Score from stored result rows.
 
@@ -173,6 +198,10 @@ def trust_score(rows, gate=0.6, dataset_report=None, adversarial=None):
         out["verdict"] = "usable"
     else:
         out["verdict"] = "low-trust"
+    # Name the corpus the measured tier was measured on, so the UI can say
+    # *what* it was calibrated against rather than just "a dataset".
+    if dataset_report:
+        out["dataset"] = dataset_report.get("dataset")
     return out
 
 

@@ -64,6 +64,22 @@ def _load_reliability(store: Store) -> dict | None:
         except Exception:
             continue
     return None
+
+
+def _calibration_for(store: Store, checkset: str | None) -> dict | None:
+    """The published calibration report, in the shape trust_score wants.
+
+    This is the bridge the measured tier never had: `calibrate --publish`
+    writes calibration.json for the reliability model, but the trust endpoint
+    read nothing, so the tier could never leave `consistency` however many
+    labels were supplied. Scoped by rubric — a calibration for `safety` must
+    not upgrade the tier for `refund-policy`.
+    """
+    report = trust.dataset_report_from_calibration(_load_reliability(store))
+    if report and checkset and report.get("checkset") and \
+            report["checkset"] != checkset:
+        return None
+    return report
 from agentcheck import redteam
 from agentcheck.evals import datasets as ds
 from agentcheck.judges import get_judge
@@ -819,7 +835,8 @@ def create_app(store: Store, default_judge: str = "typesafe",
             adv = store.latest_event(key, "redteam_run")
         except Exception:
             adv = None
-        return trust.trust_score(rows, gate=gate, adversarial=adv)
+        return trust.trust_score(rows, gate=gate, adversarial=adv,
+                                 dataset_report=_calibration_for(store, checkset))
 
     @app.get("/v1/trust.svg")
     async def trust_badge(authorization: str | None = Header(None),
@@ -834,7 +851,8 @@ def create_app(store: Store, default_judge: str = "typesafe",
             adv = store.latest_event(key, "redteam_run")
         except Exception:
             adv = None
-        ts = trust.trust_score(rows, gate=gate, adversarial=adv)
+        ts = trust.trust_score(rows, gate=gate, adversarial=adv,
+                               dataset_report=_calibration_for(store, checkset))
         return Response(content=trust.render_badge(ts), media_type="image/svg+xml")
 
     @app.get("/v1/policies")

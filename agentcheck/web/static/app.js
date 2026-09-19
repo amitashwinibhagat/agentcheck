@@ -482,8 +482,8 @@ async function loadTrust() {
       <span>${fmt(v)}</span>
     </div>`).join("");
   const tierNote = d.tier === "measured"
-    ? `Measured against a labeled dataset: ECE ${d.ece?.toFixed(3)}, accuracy ${(d.accuracy * 100).toFixed(0)}%.`
-    : `Consistency tier: no labels used. Add a labeled dataset (agentcheck calibrate) for the measured tier.`;
+    ? `Measured against ${d.dataset ? "the " + d.dataset + " dataset" : "a labeled dataset"}: ECE ${d.ece?.toFixed(3)}, accuracy ${(d.accuracy * 100).toFixed(0)}%.`
+    : `Consistency tier: no labels used. Publish a calibration (agentcheck calibrate --publish) to move to the measured tier.`;
   box.innerHTML = `<div style="padding:18px var(--gut) 40px">
     <div class="trust-hero">
       <div class="trust-score" style="color:${color}">${d.score}</div>

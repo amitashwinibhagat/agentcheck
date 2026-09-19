@@ -8,7 +8,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from agentcheck.trust import (abstention_rate, concentration, human_agreement,
-                              render_badge, stability, trust_score)
+                              render_badge, stability, trust_score,
+                              dataset_report_from_calibration)
 
 
 class TestConcentration(unittest.TestCase):
@@ -99,6 +100,31 @@ class TestTrustScore(unittest.TestCase):
         rep["decided"] = 31
         self.assertEqual(trust_score(rows, dataset_report=rep)["tier"],
                          "measured")
+
+    def test_adapter_reads_the_real_calibration_shape(self):
+        """calibration.calibration nests the numbers under 'decided' and is
+        the only producer. The tier test above hand-builds the flat shape, so
+        before the adapter nothing connected the two: the measured tier passed
+        its unit test and was unreachable from the API."""
+        real = {"judge": "typesafe", "checkset": "safety",
+                "dataset": "agent-demo",
+                "decided": {"n": 40, "ece": 0.04, "accuracy": 0.91}}
+        rep = dataset_report_from_calibration(real)
+        self.assertEqual(rep["ece"], 0.04)
+        self.assertEqual(rep["accuracy"], 0.91)
+        self.assertEqual(rep["decided"], 40)
+        self.assertEqual(rep["checkset"], "safety")
+        self.assertEqual(rep["dataset"], "agent-demo")
+        # And it flows through: the same rows upgrade with the adapted report.
+        self.assertEqual(
+            trust_score(self.real_like(), dataset_report=rep)["tier"], "measured")
+
+    def test_adapter_refuses_a_thin_or_failed_calibration(self):
+        """A calibration with no decided numbers must not upgrade the tier."""
+        self.assertIsNone(dataset_report_from_calibration(None))
+        self.assertIsNone(dataset_report_from_calibration({}))
+        self.assertIsNone(dataset_report_from_calibration(
+            {"decided": {"n": 0, "ece": None, "accuracy": None}}))
 
     def test_adversarial_absent_by_default(self):
         d = trust_score(self.real_like())
