@@ -14,14 +14,19 @@ The submodules are imported here so `routes.<domain>` always resolves after
 domain in the app.
 """
 
+from agentcheck.routes import account
 from agentcheck.routes import auth
 from agentcheck.routes import billing
 from agentcheck.routes import calibration
 from agentcheck.routes import checksets
 from agentcheck.routes import checks
+from agentcheck.routes import evals
 from agentcheck.routes import monitor
 from agentcheck.routes import policies
+from agentcheck.routes import rag
+from agentcheck.routes import redteam
 from agentcheck.routes import results
+from agentcheck.routes import runs
 from agentcheck.routes import stream
 from agentcheck.routes import trust
 from agentcheck.routes import workspace
