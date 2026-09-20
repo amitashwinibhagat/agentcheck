@@ -166,9 +166,16 @@ GET /v1/traces/{trace_id}             # the ordered steps of one run
 ```
 
 Runs group an agent's steps into one timeline — tools in order, per-step
-verdicts and decisions. The **decision is persisted** (`results.decision`),
-so the log answers *"what did we tell you to do?"* months later, not just
-tonight.
+verdict, confidence, decision and the policy that produced it. The **decision
+is persisted** (`results.decision`), so the log answers *"what did we tell you
+to do?"* months later, not just tonight.
+
+![A blocked run: search_inbox pass, send_email review, http_post fail → block](docs/screenshots/runs.png)
+
+Bring your own traces instead of live traffic — paste JSONL or upload a file,
+pick the rubric, and the rows land in the same log with a `run_id`:
+
+![Score my traces: upload JSON/JSONL or paste, pick a rubric](docs/screenshots/upload.png)
 
 Hook your agent in directly — SSE stream plus a one-line SDK:
 
@@ -182,6 +189,8 @@ Native wrappers for **OpenAI, Anthropic, LangChain, LlamaIndex** — one line,
 judge failures degrade to `.error` and never break your agent — plus import
 from **Langfuse / LangSmith** to turn existing trace history into a day-one
 calibration dataset.
+
+![Connect an agent: the exact curl for one call or a batch](docs/screenshots/connect.png)
 
 ## Trust Score
 
@@ -207,6 +216,13 @@ On the shipped 66-trace demo set: the real judge scored **84 (trusted)**, the
 keyword stub **21 (low-trust)**. The score separates a judge that discriminates
 from one that does not — live, in the UI's Trust view, with a shareable
 `/v1/trust.svg` badge for your README.
+
+![Trust Score view: 76 usable, measured tier, n=27, ECE 0.066](docs/screenshots/trust-score.png)
+
+And it watches the trend, not just the number — per-bucket verdict mix,
+flag rate, mean confidence, and how many you signed out:
+
+![Over time: judgments bucketed by day with verdict mix bars](docs/screenshots/trust-over-time.png)
 
 ```bash
 agentcheck calibrate --dataset agent-demo --judge openai --gate 0.6
@@ -248,6 +264,10 @@ agentcheck redteam --judge openai --max-asr 0.0 --out attacks.json
 agentcheck redteam --families healthcare,financial,telecom
 ```
 
+And it runs in the browser — every family, live, with the failures called out:
+
+![Under attack: 467 attacks, per-family ASR, 0% on this run](docs/screenshots/red-team.png)
+
 ## Deterministic screens — the floor beneath the model
 
 An LLM judge can be talked out of a call that looks ordinary. Screens are
@@ -284,6 +304,8 @@ agentcheck policies apply refund-policy.yaml --what-if sample.json
 
 Dry-run before you enforce. The decision produced is stored with the row
 forever — plan numbers come from *our* catalogue, never from a payload.
+
+![Policies: each rule and its ruling — block, human, approve](docs/screenshots/policies.png)
 
 ## Bring your own judge
 
@@ -322,6 +344,8 @@ Eight ship built-in (groundedness, injection-resistance, refund-policy,
 comment-moderation, support-tone, code-review, RAG retrieval, …). Drop a YAML
 file in the directory and it appears in the UI. The eval matrix runs
 **datasets × rubrics × judges** in one command:
+
+![Rubrics: every rubric available to the process, with its checks and verdicts](docs/screenshots/rubrics.png)
 
 ```bash
 agentcheck eval --config evals/qa.yaml --fail-under 0.8 --gate ci
