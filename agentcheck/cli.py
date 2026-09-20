@@ -13,7 +13,7 @@ from rich.table import Table
 
 from agentcheck import checks as check_lib
 from agentcheck import labels as labels_mod
-from agentcheck.judges import available as judges_available, get_judge
+from agentcheck.judges import available as judges_available, default_name, get_judge
 from agentcheck.store import Store
 
 console = Console()
@@ -96,7 +96,7 @@ def _data_dir_opt(f):
 def _judge_opt(f):
     """The default-judge spelling. Commands that mean something else by
     --judge (server default, labeler) declare their own."""
-    return click.option("--judge", default="typesafe")(f)
+    return click.option("--judge", default=None)(f)
 
 
 def _checkset_opt(f):
@@ -115,14 +115,15 @@ def init(data_dir: str | None) -> None:
     console.print(f"[green]✓[/green] store at [bold]{d / 'agentcheck.db'}[/bold]")
 
     key = os.environ.get("TYPESAFE_API_KEY")
-    if not key:
+    if not key and not os.environ.get("OPENAI_API_KEY"):
         console.print(
-            "[yellow]![/yellow] TYPESAFE_API_KEY not set. Get one at "
-            "[link=https://console.typesafe.ai/keys]console.typesafe.ai/keys[/link]"
+            "[yellow]![/yellow] No judge key set. Set TYPESAFE_API_KEY "
+            "(hosted) or OPENAI_API_KEY (bring your own, works with any "
+            "OpenAI-compatible endpoint via OPENAI_BASE_URL), or run "
+            "offline with the stub judge."
         )
         return
-    # live test: one real call, report honest latency
-    judge = get_judge("typesafe")
+    judge = get_judge("typesafe" if key else "openai")
     from agentcheck.judges.base import noul
     import time
     t0 = time.time()
@@ -132,8 +133,8 @@ def init(data_dir: str | None) -> None:
         ms = (time.time() - t0) * 1000
         console.print(
             f"[green]✓[/green] live test  [bold]{ms:.0f}ms[/bold]  "
-            f"model={j.model}  tokens={j.input_tokens}+{j.output_tokens}  "
-            f"server={j.server_ms}ms"
+            f"model={j.model}  tokens={j.input_tokens}+{j.output_tokens}"
+            + (f"  server={j.server_ms}ms" if j.server_ms else ""),
         )
         console.print(
             f"  request_id=[dim]{j.request_id}[/dim]  "

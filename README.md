@@ -424,8 +424,7 @@ setup works on any VM.
   against the live Razorpay account** (2026-09-19): checkout creates a real
   subscription, a signed webhook moves the key between plans, a forged
   signature is rejected. The plans exist (`AgentCheck Pro` ₹2,999/mo,
-  `AgentCheck Team` ₹9,999/mo) — see `AGENTS.md` "Pending human actions" for the
-  one remaining decision, which is where to expose checkout.
+  `AgentCheck Team` ₹9,999/mo); checkout is exposed on the hosted instance.
 
 ### History import (keep your tracing, add proof)
 
@@ -852,18 +851,14 @@ quietly producing a number nobody questions:
 >
 > ```bash
 > # install from the published wheel — no checkout needed
-> pip install https://app.35-253-233-192.sslip.io/wheels/agentcheck_verify-0.1.0-py3-none-any.whl
->
-> # or from a checkout of this repository
-> pip install -e .
-> ```
->
-> The container image is wired to GHCR but has not published yet — GitHub
-> Actions is blocked on billing on this account (see AGENTS.md). Until that is
-> fixed, the wheel above is the install path.
+> The container image is published on GHCR: `ghcr.io/amitashwinibhagat/agentcheck`.
+> A wheel is also served from the hosted instance:
+> `pip install https://app.35-253-233-192.sslip.io/wheels/agentcheck_verify-0.2.0-py3-none-any.whl`
 
 For a hosted prospect demo see [docs/HOSTING.md](docs/HOSTING.md) —
-ranked free options, demo mode, and the demo-day checklist.
+ranked free options, demo mode, and the demo-day checklist. For a private
+self-host (your machine or your cloud, your judge key), see
+[docs/SELFHOST.md](docs/SELFHOST.md).
 
 ```bash
 docker compose up --build
@@ -872,7 +867,8 @@ docker compose up --build
 
 Works with zero configuration — the offline stub judge keeps the container
 useful with no key and no network. To judge live, put your key beside the
-compose file (`echo 'TYPESAFE_API_KEY=apikey_…' > .env`) and restart. The
+compose file (`echo 'OPENAI_API_KEY=sk-…' > .env` — or
+`TYPESAFE_API_KEY=apikey_…` for the hosted judge) and restart. The
 Decision Log and history persist in the `agentcheck-data` volume.
 
 Without Docker, from a checkout of this repository:

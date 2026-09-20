@@ -3,11 +3,14 @@
 # PyPI is a different project (trace/replay/assert, 0.1.0, 2025-07) which also
 # registers an `agentcheck` command. The import package and the CLI command
 # stay `agentcheck` -- renaming imports is not worth it, and nobody sensible
-# installs both. Caveat recorded in AGENTS.md "Pending human actions".
+# installs both. The collision is recorded in the README.
 name = "agentcheck-verify"
-version = "0.1.0"
+version = "0.2.0"
 description = "Calibrated verification for agent tool calls. Proxy + meter + eval harness."
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Amit Ashwini Bhagat" }]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",

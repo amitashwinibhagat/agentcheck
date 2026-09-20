@@ -40,3 +40,12 @@ dist/
 .review/
 icon-output/
 output/
+
+# internal-only docs: strategy, margins, battlecard. Public repo, private plan.
+/AGENTS.md
+/PLAN.md
+/MONETIZATION.md
+/PRODUCT.md
+/REVIEW-FINDINGS.md
+/competitive-battlecard.html
+/PUBLISH-PLAN.md

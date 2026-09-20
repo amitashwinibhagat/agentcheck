@@ -130,7 +130,7 @@ New signups start on **free** (500/mo, 1 seat). The `trial_days` parameter
 already exists on `create_key` for later; trials are a pricing decision, not
 part of this build.
 
-## WorkOS checklist (human actions, already in AGENTS.md)
+## WorkOS checklist (human actions)
 
 Production redirect URI for the callback, Email + Password sign-in method
 enabled, bot protection on. Staging redirects do not carry to production, and
