@@ -214,21 +214,32 @@ Then load the UI and check **Runs** shows content.
 
 `agentcheck-data` is a named volume on the boot disk. It survives
 `docker compose restart`, `up --build`, and reboots. It does **not** survive
-deleting the VM — so back up the one file that matters:
+deleting the VM — so both instances are backed up nightly:
 
-```bash
-# On the VM. SQLite is safe to copy while the app runs only if you use .backup.
-docker compose exec agentcheck python -c "
-import sqlite3, os
-p = os.environ['AGENTCHECK_HOME'] + '/agentcheck.db'
-sqlite3.connect(p).backup(sqlite3.connect('/data/backup.db'))
-print('wrote /data/backup.db')"
-
-docker compose cp agentcheck:/data/backup.db ./agentcheck-$(date +%F).db
-```
+- `deploy/gcp/backup.sh` snapshots each live DB with the sqlite `.backup`
+  API (safe against a running writer — unlike `cp`), copies it to
+  `~/agentcheck-backups/`, verifies it (`integrity_check` plus key/result
+  counts), and prunes to 7 daily snapshots per service.
+- Cron runs it daily at 03:00 UTC; the watchdog below checks freshness.
+- Manual backup is the same script: `deploy/gcp/backup.sh`.
 
 For a real deployment set `AGENTCHECK_DB_URL` to Postgres (Neon's free tier
 works) — then the data lives outside the VM entirely.
+
+## Watching it
+
+Two layers, because they catch different failures:
+
+- **GCP uptime checks + email alerts** (the pager). Two 5-minute checks, one
+  per public root; one alert policy fires on either failing. This catches a
+  dead host, a dead Caddy, or expired TLS. Verified live with passing check
+  history on both hosts.
+- **`deploy/gcp/watchdog.sh` every 5 minutes** (the early warning). Read-only:
+  container health, both public roots over the full TLS path, disk under 80%,
+  certs more than 14 days out, and a fresh verified backup per service.
+  Loud log lines and a nonzero exit on any failure; it changes nothing and
+  restarts nothing. It cannot page (no mail path on the VM) — that is what
+  the GCP alerts are for.
 
 ## Updating
 
