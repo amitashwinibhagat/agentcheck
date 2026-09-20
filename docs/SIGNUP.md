@@ -1,6 +1,12 @@
 # Signup: from stranger to first judged call
 
-**Status:** design. Nothing here is built yet.
+**Status:** built 2026-09-20 (tests: `tests/test_signup.py`, 10 tests; browser
+flow proven locally with a real session). One deviation from the draft below:
+Step 2's auto-mint in `auth_callback` was dropped in favor of the endpoint
+alone — one minting mechanism, not two, so a retried callback can never
+double-mint and there is no key to smuggle through a redirect. The UI calls
+`POST /v1/me/keys` on first load when session-authenticated but keyless,
+guarded by a per-tab claimed flag plus the endpoint's cap of 5.
 
 ## The gap, verified
 

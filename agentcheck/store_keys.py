@@ -23,23 +23,42 @@ class KeysMixin:
         return "kid_" + uuid.uuid4().hex[:16]
     def create_key(self, name: str, qpm_limit: int = 600,
                    monthly_allowance: int = 500, plan: str = "free",
-                   trial_days: int | None = None) -> str:
+                   trial_days: int | None = None,
+                   workspace_id: str | None = None) -> str:
         """Create a key. The raw token is returned ONCE and never stored;
-        only its hash lives in the DB from here on."""
+        only its hash lives in the DB from here on.
+
+        Without workspace_id the key gets its own fresh workspace (CLI
+        issuance, migrations). With one the key joins that workspace and no
+        new workspace is spawned — the signup flow, where the workspace
+        already exists. A bad id fails loudly rather than orphaning a key."""
         import secrets
         key = "ac_" + secrets.token_urlsafe(32)
         now = time.time()
         trial_ends_at = (now + trial_days * 86400) if trial_days else None
         kid = self._new_kid()
         with self._conn() as c:
-            c.execute(
-                "INSERT INTO api_keys (kid, key_hash, key_prefix, name, created, "
-                "qpm_limit, monthly_allowance, plan, trial_ends_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
-                (kid, _hash_key(key), key[:8], name, now, qpm_limit,
-                 monthly_allowance, plan, trial_ends_at),
-            )
-            self._attach_workspace(c, kid, name, plan=plan)
+            if workspace_id is None:
+                c.execute(
+                    "INSERT INTO api_keys (kid, key_hash, key_prefix, name, created, "
+                    "qpm_limit, monthly_allowance, plan, trial_ends_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (kid, _hash_key(key), key[:8], name, now, qpm_limit,
+                     monthly_allowance, plan, trial_ends_at),
+                )
+                self._attach_workspace(c, kid, name, plan=plan)
+            else:
+                exists = c.execute("SELECT 1 FROM workspaces WHERE id = ?",
+                                   (workspace_id,)).fetchone()
+                if exists is None:
+                    raise ValueError(f"unknown workspace: {workspace_id}")
+                c.execute(
+                    "INSERT INTO api_keys (kid, key_hash, key_prefix, name, created, "
+                    "qpm_limit, monthly_allowance, plan, trial_ends_at, "
+                    "workspace_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (kid, _hash_key(key), key[:8], name, now, qpm_limit,
+                     monthly_allowance, plan, trial_ends_at, workspace_id),
+                )
             c.execute(
                 "INSERT INTO events (ts, user_key, event, props_json) VALUES (?,?,?,?)",
                 (now, kid, "key_created",

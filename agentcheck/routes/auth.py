@@ -4,9 +4,20 @@ import uuid
 
 from fastapi import Header, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, Field
 
 from agentcheck import auth
 from agentcheck.routes import shared
+
+#: How many keys a session may mint for one workspace. The signup flow mints
+#: the first; the rest are spares and rotations. Counted from the store, so a
+#: restart cannot reset it, and small enough that a spam signup costs rows,
+#: not judge budget (each key is still capped at 500 free questions/month).
+ME_KEY_LIMIT = 5
+
+
+class MeKeyRequest(BaseModel):
+    name: str = Field(default="default", min_length=1, max_length=80)
 
 
 def register(app, store, idp):
@@ -54,9 +65,22 @@ def register(app, store, idp):
         # here — an invited person would sign in and still not be a member).
         claimed = store.bind_memberships(profile["email"], user["id"])
         invited = store.claim_invites(profile["email"], user["id"])
+        # A stranger signs in with no invite and no workspace: give them one,
+        # with themselves as owner. Skipped for anyone who already belongs
+        # somewhere, so a retried callback cannot double-create. This is the
+        # front half of signup; the key comes from POST /v1/me/keys.
+        workspace_created = None
+        if not store.workspaces_for_user(user["id"]):
+            display = ((profile.get("name") or "").strip()
+                       or profile["email"].split("@")[0])
+            ws = store.create_workspace(f"{display}'s workspace",
+                                        owner_email=profile["email"])
+            store.link_member(ws["id"], profile["email"], user["id"])
+            workspace_created = ws["id"]
         store.record_event(user["id"], "login",
                            {"provider": idp.name, "claimed": claimed,
-                            "invites_claimed": len(invited)})
+                            "invites_claimed": len(invited),
+                            "workspace_created": workspace_created})
         session = auth.new_session(user["id"])
         store.create_session(session)
         resp = RedirectResponse(payload["next"], status_code=302)
@@ -70,9 +94,11 @@ def register(app, store, idp):
         """Who am I, and which workspaces do I belong to."""
         user = shared.current_user(store, request)
         if user is None:
-            return {"authenticated": False, "provider": idp.name}
+            return {"authenticated": False, "provider": idp.name,
+                    "login_configured": idp.configured()}
         rows = store.workspaces_for_user(user["id"])
         return {"authenticated": True, "provider": idp.name,
+                "login_configured": idp.configured(),
                 "user": {"id": user["id"], "email": user["email"],
                          "name": user["name"]},
                 "workspaces": [{"id": w["id"], "name": w["name"],
@@ -87,3 +113,33 @@ def register(app, store, idp):
                         media_type="application/json")
         resp.delete_cookie(auth.SESSION_COOKIE, path="/")
         return resp if removed else resp
+
+    @app.post("/v1/me/keys")
+    async def me_create_key(req: MeKeyRequest, request: Request,
+                            authorization: str | None = Header(None)):
+        """Mint a key for the signed-in user's workspace, from the session.
+
+        This is the point of the endpoint: a session with no key must be able
+        to get its first one, so Bearer is refused here — a confused client
+        holding a key should use POST /v1/keys instead. The raw token is
+        returned once and never listed."""
+        if authorization:
+            raise HTTPException(401, "this endpoint uses sign-in (session "
+                                     "cookie), not an API key; use POST /v1/keys")
+        user = shared.current_user(store, request)
+        if user is None:
+            raise HTTPException(401, "sign in first")
+        spaces = store.workspaces_for_user(user["id"])
+        if not spaces:
+            # First-login setup should have made one; kept as a guard.
+            raise HTTPException(403, "no workspace for this sign-in")
+        wid = spaces[0]["id"]  # oldest first (ORDER BY created)
+        if len(store.workspace_keys(wid)) >= ME_KEY_LIMIT:
+            raise HTTPException(429, f"key limit reached for this workspace "
+                                     f"({ME_KEY_LIMIT}); use an existing key")
+        name = (req.name or "").strip() or "default"
+        raw = store.create_key(name, qpm_limit=600, monthly_allowance=500,
+                               plan="free", workspace_id=wid)
+        row = store.lookup_key(raw)
+        return {"key": raw, "kid": row["kid"], "workspace_id": wid,
+                "plan": "free"}

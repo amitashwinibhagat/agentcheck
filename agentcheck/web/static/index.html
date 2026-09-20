@@ -51,6 +51,7 @@
       <button type="button" class="btn" id="open-upload">Score my traces</button>
       <button type="button" class="btn ghost" id="open-examples">Examples</button>
       <button type="button" class="btn ghost" id="open-connect">Connect</button>
+      <button type="button" class="btn ghost" id="auth-btn" hidden>Sign in</button>
     </div>
   </header>
 
@@ -256,6 +257,32 @@
       <div class="rowline">
         <button type="button" class="btn" id="use-key">Use this key</button>
         <span class="note" id="key-status" aria-live="polite"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-firstkey" hidden role="dialog" aria-modal="true" aria-labelledby="h-firstkey">
+  <div class="sheet-in">
+    <div class="sheet-head">
+      <div>
+        <h2 id="h-firstkey">Your API key</h2>
+        <p>You are signed in and your workspace is ready. This key is shown
+        <strong>once</strong> — copy it now. It is already stored in this tab;
+        for other machines, paste it there.</p>
+      </div>
+      <button type="button" class="x" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="field">
+        <label for="firstkey-value">API key</label>
+        <input id="firstkey-value" type="text" readonly
+               autocomplete="off" spellcheck="false">
+      </div>
+      <div class="rowline">
+        <button type="button" class="btn" id="copy-firstkey">Copy</button>
+        <button type="button" class="btn ghost" data-close>Continue</button>
+        <span class="note" id="firstkey-status" aria-live="polite"></span>
       </div>
     </div>
   </div>

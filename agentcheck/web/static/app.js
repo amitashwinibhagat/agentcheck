@@ -193,12 +193,93 @@ $("ex-cards").addEventListener("click", (e) => {
 // and only then the gate. Without the gate the hosted UI showed "Is agentcheck
 // serve running?" and offered no way to enter a key at all, which made every
 // non-demo deployment API-only in the browser.
+// Sessions: the UI learns sign-in. A signed-in tab with no key mints its
+// first one from the session (POST /v1/me/keys), shows it once, and stores
+// it like any other key. Raw fetch, not api(): the session endpoint refuses
+// Bearer by design, and cookies ride along same-origin by default.
+const CLAIMED_STORE = "agentcheck_claimed";
+
+async function sessionMe() {
+  try {
+    const r = await fetch("/v1/auth/me", { credentials: "same-origin" });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+async function refreshAuthButton() {
+  const btn = $("auth-btn");
+  const me = await sessionMe();
+  if (!me) { btn.hidden = true; return; }
+  // Sign out needs only the session (logout is local); sign in needs a
+  // configured provider. Where neither holds, there is no button.
+  if (me.authenticated) {
+    btn.hidden = false;
+    btn.textContent = "Sign out";
+    btn.onclick = async () => {
+      try {
+        await fetch("/v1/auth/logout",
+                    { method: "POST", credentials: "same-origin" });
+      } catch { /* the cookie is gone either way after reload */ }
+      sessionStorage.removeItem(KEY_STORE);
+      sessionStorage.removeItem(CLAIMED_STORE);
+      location.reload();
+    };
+  } else if (me.login_configured) {
+    btn.hidden = false;
+    btn.textContent = "Sign in";
+    btn.onclick = () => { location.href = "/v1/auth/login?next=/"; };
+  } else {
+    btn.hidden = true;
+  }
+}
+
+async function claimFirstKey() {
+  // One mint per tab: the endpoint caps at five per workspace, but a reload
+  // with no stored key must not burn another on every boot.
+  if (sessionStorage.getItem(CLAIMED_STORE)) return null;
+  const me = await sessionMe();
+  if (!me || !me.authenticated) return null;
+  let k;
+  try {
+    const r = await fetch("/v1/me/keys", { method: "POST",
+      credentials: "same-origin", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "browser" }) });
+    if (!r.ok) return null;
+    k = await r.json();
+  } catch { return null; }
+  sessionStorage.setItem(KEY_STORE, k.key);
+  sessionStorage.setItem(CLAIMED_STORE, "1");
+  $("firstkey-value").value = k.key;
+  $("firstkey-status").textContent = "";
+  openSheet("firstkey");
+  return k.key;
+}
+
+$("copy-firstkey").addEventListener("click", async () => {
+  const v = $("firstkey-value").value;
+  try {
+    await navigator.clipboard.writeText(v);
+    $("firstkey-status").textContent = "Copied.";
+  } catch {
+    $("firstkey-value").select();
+    $("firstkey-status").textContent = "Copy it manually — it will not be shown again.";
+  }
+});
+
 async function boot() {
+  await refreshAuthButton();
   state.key = sessionStorage.getItem(KEY_STORE) || "";
   if (!state.key) {
     try {
       state.key = (await api("/v1/bootstrap")).key;
     } catch {
+      state.key = "";
+    }
+    // No bootstrap key: a signed-in tab mints its first from the session;
+    // anyone else gets the gate, as before.
+    if (!state.key) state.key = (await claimFirstKey()) || "";
+    if (!state.key) {
       gateForKey();
       $("rows").innerHTML = `<div class="empty">
         <h2>This workspace is private</h2>
