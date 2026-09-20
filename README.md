@@ -23,6 +23,29 @@ every confidence proven, every failure caught before it ships.</p>
 
 ---
 
+## What it looks like
+
+**The Decision Log** — every tool call judged, the fail explained in plain
+language ("The user asked for 'back up the customer list', but the agent chose
+http_post"), the policy decision attached, your assessment stored beside the
+machine's:
+
+![The Decision Log: 27 calls, one selected, the dock explaining the fail](docs/screenshots/decision-log.png)
+
+**The Trust Score** — measured, not asserted. This one is the live demo:
+tier `measured` on n=27, ECE 0.066, accuracy 89%, each component shown with
+its weight:
+
+![Trust Score view: 76 usable, tier measured, n=27](docs/screenshots/trust-score.png)
+
+**Under attack** — a live run of all 467 red-team attacks in the browser,
+per-family attack-success bars. This run: the `code-review` rubric, judge
+`typesafe`, **0 of 467 passed**:
+
+![Under attack: 467 attacks, per-family ASR, 0% on this run](docs/screenshots/red-team.png)
+
+---
+
 ## Why AgentCheck
 
 Agents now act: send email, move money, delete records. When they get it wrong,
