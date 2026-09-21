@@ -55,14 +55,32 @@ def _tool(row: dict) -> str:
     return str(row.get("tool") or "unknown")
 
 
+def _usable(row: dict) -> bool:
+    """Could a sign-out on this row ever count toward a calibration?
+
+    `calibration.report_from_signoffs` needs a finite confidence to place the
+    item on the curve. A row whose judgement errored has none, so asking
+    someone to label it spends one of their 30 sign-outs on something that can
+    never count. Those rows are excluded from the batch rather than silently
+    wasted.
+    """
+    conf = row.get("confidence")
+    try:
+        c = float(conf)
+    except (TypeError, ValueError):
+        return False
+    return c == c and abs(c) != float("inf")
+
+
 def select_batch(rows: Sequence[dict], size: int = 30) -> dict:
     """Pick up to `size` unlabeled calls, most informative first.
 
     Returns {"ids": [...], "coverage": {...}, "considered": n}. Only rows with
-    no assessment yet are eligible — labeling something already labeled
-    teaches nothing and the UI would show it as done.
+    no assessment yet AND a confidence that could be calibrated are eligible —
+    labeling something already labeled teaches nothing, and labeling an errored
+    judgement cannot count.
     """
-    live = [r for r in rows if not r.get("assessment")]
+    live = [r for r in rows if not r.get("assessment") and _usable(r)]
     fails = [r for r in live if _verdict(r) == "fail"]
     reviews = [r for r in live if _verdict(r) == "review"]
     passes = [r for r in live if _verdict(r) == "pass"]

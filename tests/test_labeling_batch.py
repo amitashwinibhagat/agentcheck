@@ -78,6 +78,23 @@ class TestSelection(unittest.TestCase):
         few = [row(i, "pass", 0.9) for i in range(3)]
         self.assertEqual(len(labeling.select_batch(few, size=30)["ids"]), 3)
 
+    def test_errored_rows_are_never_offered(self):
+        """A sign-out on a failed judgement can never count toward the 30.
+
+        `report_from_signoffs` needs a finite confidence; an errored row has
+        none, so offering it spends one of the user's labels on nothing.
+        """
+        rows = [row(i, "pass", 0.9) for i in range(5)]
+        rows.append({"id": "err", "trace_verdict": None, "confidence": None,
+                     "tool": "t", "ts": 99, "assessment": None})
+        rows.append({"id": "nan", "trace_verdict": "fail",
+                     "confidence": float("nan"), "tool": "t", "ts": 98,
+                     "assessment": None})
+        plan = labeling.select_batch(rows, size=30)
+        self.assertNotIn("err", plan["ids"])
+        self.assertNotIn("nan", plan["ids"])
+        self.assertEqual(len(plan["ids"]), 5)
+
     def test_store_rows_say_verdict_and_public_rows_say_trace_verdict(self):
         # Both shapes exist in this codebase; reading only one silently made
         # every row "unknown" and disabled the stratification without erroring.
