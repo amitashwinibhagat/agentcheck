@@ -32,7 +32,7 @@ machine's:
 
 ![The Decision Log: 27 calls, one selected, the dock explaining the fail](docs/screenshots/decision-log.png)
 
-**The Trust Score** — measured, not asserted. This one is the live demo:
+**The Trust Score** — measured, not asserted. Captured from a seeded instance:
 tier `measured` on n=27, ECE 0.066, accuracy 89%, each component shown with
 its weight:
 
@@ -69,12 +69,18 @@ AgentCheck is the missing **decision layer**:
 No other tool ships measured calibration as a first-class feature. That is the
 wedge, and it is deliberate.
 
-> **Try it now** — the hosted demo is live at
-> [35-253-233-192.sslip.io](https://35-253-233-192.sslip.io/): a seeded
-> decision log, full Trust view, and the red-team suite. No signup for the demo;
-> keys are handed out automatically. The conversion page — pricing, self-host,
-> the honest caveat that hosted signup is not yet enabled — is at
-> [/start](https://35-253-233-192.sslip.io/start).
+> **Pricing and the honest state of it** —
+> [35-253-233-192.sslip.io/start](https://35-253-233-192.sslip.io/start):
+> self-host is free forever, hosted tiers exist in Razorpay, and self-serve
+> signup is built but **not yet enabled on that host**, which the page says
+> plainly rather than showing a button that 404s.
+>
+> There is **no public demo instance.** One existed and handed out a working key
+> to anyone who asked (`/v1/bootstrap`), which meant a stranger could read the
+> whole log and spend the judge budget without signing in. Public hosts now run
+> with `AGENTCHECK_DEMO=0`: `/start` is marketing, `/` requires a key or a
+> session, and every data-bearing endpoint returns 401 without one. The
+> screenshots in this README are the way to see the product without running it.
 
 ## Quickstart
 

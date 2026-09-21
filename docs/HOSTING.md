@@ -51,15 +51,30 @@ red-team runs** against this app, so the free tier is comfortable for a demo.
 
 ---
 
-## Live demo: https://35-253-233-192.sslip.io
+## Hosted: https://35-253-233-192.sslip.io
 
 One GCP `e2-micro`, app plus Caddy, data on a named volume on the boot disk
-that survives rebuilds and reboots. This is the instance to check before a
-demo.
+that survives rebuilds and reboots.
 
-| Check | How |
+**There is deliberately no public demo mode on this host.** It had one, and
+`/v1/bootstrap` handed a live key to anyone — full read access to the log plus
+the judge budget. `AGENTCHECK_DEMO=0` is now the default in
+`deploy/gcp/docker-compose.yml`, so a rebuild cannot silently reopen it.
+`/start` is the public page; `/` needs a key or a session.
+
+To demo the product to a prospect, issue a scoped key (`agentcheck key
+prospect --qpm 60`) and revoke it after, or run a throwaway box with the key
+hand-out explicitly enabled:
+
+```bash
+AGENTCHECK_DEMO=1 docker compose up -d   # ONLY on a box you can burn
+```
+
+| Check (with a key) | How |
 |---|---|
-| `/v1/bootstrap` from a public IP | returns `{"key": "ac_…", "demo": true}` |
+| `/v1/bootstrap` from a public IP | returns `403 browser auto-login is only for localhost` |
+| Every data route without a key | returns `401`, and the judge is not called |
+| `/start` | returns `200` and links to self-host/GitHub, never to `/` |
 | Seeded log present | `GET /v1/results` shows the seeded calls, not an empty state |
 | Rubrics | `GET /v1/checksets` returns 8 |
 | Policies | `GET /v1/policies` returns the shipped set |

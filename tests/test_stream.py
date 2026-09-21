@@ -77,7 +77,11 @@ class TestStreamEndpoint(unittest.TestCase):
 
         scope = {"type": "http", "method": "GET", "path": "/v1/stream",
                  "query_string": f"key={key}".encode(),
-                 "headers": [], "client": ("127.0.0.1", 1)}
+                 # A real client always sends Host; is_local requires it to be
+                 # a localhost name now (a public name is not a same-box
+                 # browser, and that predicate gates the key hand-out).
+                 "headers": [(b"host", b"localhost:7373")],
+                 "client": ("127.0.0.1", 1)}
         req = Request(scope)
 
         async def first_event():

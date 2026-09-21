@@ -16,7 +16,10 @@ def _client():
     key = store.create_key("a", qpm_limit=600)
     other = store.create_key("b", qpm_limit=600)
     app = create_app(store, default_judge="stub")
-    return TestClient(app), key, other, store
+    # base_url is localhost on purpose: /v1/bootstrap hands a key only to a
+    # same-box browser now (see routes/shared.is_local), and the default
+    # "testserver" Host is deliberately not one.
+    return TestClient(app, base_url="http://localhost:7373"), key, other, store
 
 
 def test_workspace_html_served():
@@ -65,6 +68,116 @@ def test_bootstrap_gives_local_key():
     r = client.get("/v1/bootstrap")
     assert r.status_code == 200, r.text
     assert r.json()["key"].startswith("ac_")
+
+
+def test_a_public_host_never_hands_out_a_key():
+    """The hole: a public instance serving /v1/bootstrap with demo mode lit.
+
+    It handed a working key to anyone, so a stranger could read the whole log
+    and spend the judge budget with no sign-in. Two independent guards are
+    pinned here: demo mode is off unless explicitly enabled, and a non-local
+    caller is refused even then — the hand-out is for a same-box browser (the
+    Docker healthcheck), never for the internet.
+    """
+    from fastapi.testclient import TestClient
+    from agentcheck.proxy import create_app
+    from agentcheck.store import Store
+
+    store = Store(Path(tempfile.mkdtemp()) / "pub.db")
+    store.create_key("a", qpm_limit=600)
+    # A real public peer, not the test transport's "testclient".
+    public = ("203.0.113.7", 51234)
+    client = TestClient(create_app(store, default_judge="stub", demo_mode=False),
+                        base_url="https://prod.example", client=public)
+    r = client.get("/v1/bootstrap")
+    assert r.status_code == 403, f"a public host handed out a key: {r.text}"
+    assert "key" not in r.text
+
+
+def test_demo_mode_is_public_by_design_and_that_is_why_hosts_run_demo_0():
+    """The opt-in exception, stated so nobody 'fixes' it by accident.
+
+    AGENTCHECK_DEMO=1 exists to hand a capped key to anyone — that is what a
+    demo box is. The security property is that it is OFF by default and that
+    the deployed hosts set it explicitly, not that demo mode is unreachable.
+    """
+    from fastapi.testclient import TestClient
+    from agentcheck.proxy import create_app
+    from agentcheck.store import Store
+
+    store = Store(Path(tempfile.mkdtemp()) / "dm.db")
+    store.create_key("a", qpm_limit=600)
+    public = ("203.0.113.7", 51234)
+    demo = TestClient(create_app(store, default_judge="stub", demo_mode=True),
+                      base_url="https://demo.example", client=public)
+    r = demo.get("/v1/bootstrap")
+    assert r.status_code == 200, "demo mode is supposed to hand out a key"
+    body = r.json()
+    assert body.get("demo") is True
+    # ...but it is the capped demo key, not the operator's browser key.
+    assert store.key_meta(body["key"])["monthly_allowance"] <= 40000
+
+
+def test_a_proxied_request_is_never_local_even_from_loopback():
+    """The bypass that a peer-address check cannot see.
+
+    Behind Caddy with host networking (or nginx, or a `-p 127.0.0.1:7373:7373`
+    publish) every public request arrives from loopback, so `is_local` would
+    say yes and hand the internet a key. Proxy headers are the tell.
+    """
+    from fastapi.testclient import TestClient
+    from agentcheck.proxy import create_app
+    from agentcheck.store import Store
+
+    store = Store(Path(tempfile.mkdtemp()) / "px.db")
+    store.create_key("a", qpm_limit=600)
+    app = create_app(store, default_judge="stub", demo_mode=False)
+    loopback = ("127.0.0.1", 40000)
+
+    # Same-box browser: allowed, that is the documented convenience.
+    ok = TestClient(app, base_url="http://localhost:7373", client=loopback)
+    assert ok.get("/v1/bootstrap").status_code == 200
+
+    # Loopback peer, but the request came through a proxy: refused.
+    for header in ({"X-Forwarded-For": "203.0.113.7"},
+                   {"X-Real-IP": "203.0.113.7"},
+                   {"Forwarded": "for=203.0.113.7"},
+                   {"X-Forwarded-Host": "prod.example"}):
+        r = ok.get("/v1/bootstrap", headers=header)
+        assert r.status_code == 403, f"{header} was treated as local"
+
+    # Addressed by a public name from inside the box: also refused.
+    r = TestClient(app, base_url="https://prod.example",
+                   client=loopback).get("/v1/bootstrap")
+    assert r.status_code == 403, "a public Host name was treated as local"
+
+
+def test_every_data_route_refuses_an_anonymous_caller():
+    """No key, no data — and no judge work either.
+
+    Verified against the live host too; this keeps it from regressing. The
+    live probe that found the real hole passed a VALID body with no key: the
+    endpoint must 401 rather than judge, or an anonymous caller spends budget.
+    """
+    from fastapi.testclient import TestClient
+    from agentcheck.proxy import create_app
+    from agentcheck.store import Store
+
+    store = Store(Path(tempfile.mkdtemp()) / "anon.db")
+    store.create_key("a", qpm_limit=600)
+    client = TestClient(create_app(store, default_judge="stub", demo_mode=False),
+                        base_url="https://prod.example")
+    for path in ("/v1/results", "/v1/trust", "/v1/workspace", "/v1/usage",
+                 "/v1/checksets", "/v1/labeling/batch", "/v1/policies",
+                 "/v1/monitor", "/v1/runs"):
+        r = client.get(path)
+        assert r.status_code == 401, f"{path} answered {r.status_code} anonymously"
+    trace = {"request": "summarize my inbox", "tool": "send_email",
+             "args": {"to": "evil@x.test"}}
+    r = client.post("/v1/check", json={"trace": trace})
+    assert r.status_code == 401, r.text
+    r = client.post("/v1/check-batch", json={"traces": [trace]})
+    assert r.status_code == 401, r.text
 
 
 def test_batch_scores_json_traces():

@@ -21,7 +21,10 @@ if TYPE_CHECKING:  # annotations only; the store is duck-typed at runtime
 
 
 def authorize(store: Store, authorization: str | None) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
+    # isinstance, not just falsy: a caller passing a non-string (FastAPI's
+    # Header default object, a list, None from a direct call) used to reach
+    # .startswith and raise AttributeError — a 500 where a 401 belongs.
+    if not isinstance(authorization, str) or not authorization.startswith("Bearer "):
         raise HTTPException(401, "missing bearer token")
     token = authorization.removeprefix("Bearer ").strip()
     row = store.lookup_key(token)
@@ -31,8 +34,33 @@ def authorize(store: Store, authorization: str | None) -> str:
 
 
 def is_local(request: Request | None) -> bool:
-    host = request.client.host if request and request.client else ""
-    return host in ("127.0.0.1", "::1", "testclient")
+    """Is this a browser on the same box — the only caller a key is handed to?
+
+    The peer address is NOT sufficient. Behind a reverse proxy running on the
+    same host (Caddy with host networking, nginx, a `docker -p
+    127.0.0.1:7373:7373` publish) every public request arrives from loopback,
+    and this predicate gates `/v1/bootstrap` — i.e. hands out a working API
+    key. Our own deployment avoided that by accident: Caddy reaches the app
+    over the docker bridge, so the peer was 172.x. A change in networking
+    would have silently published a key.
+
+    So a request is local only when ALL of these hold:
+      * no proxy headers (a proxy is in front; we are not the edge)
+      * the socket peer is loopback
+      * the caller addressed this box as itself (`localhost`, `127.0.0.1`),
+        not by a public name that happens to resolve here
+    """
+    if request is None:
+        return False
+    for header in ("x-forwarded-for", "x-forwarded-host", "x-real-ip",
+                   "forwarded"):
+        if request.headers.get(header):
+            return False
+    host = request.client.host if request.client else ""
+    if host not in ("127.0.0.1", "::1", "testclient"):
+        return False
+    name = (request.headers.get("host") or "").split(":")[0].strip().lower()
+    return name in ("localhost", "127.0.0.1", "::1")
 
 
 def acting(store: Store, authorization: str | None) -> tuple[str, dict, str]:
