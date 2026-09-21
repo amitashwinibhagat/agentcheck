@@ -219,6 +219,57 @@ class VerdictMixin:
                 (user_key, result_id),
             ).fetchone()
         return None if row is None else self._public(dict(row))
+    def signoff_counts(self, user_key: str | None = None,
+                       gate: float = 0.6) -> dict:
+        """Sign-out counts, with the three numbers kept distinct.
+
+        `total`  — every row a person signed out (any assessment)
+        `signal` — the ones carrying signal (looks_correct / actual_issue)
+        `decided`— those at or above the gate, i.e. what a calibration counts
+
+        They were one number once, which made `total` mean two things
+        depending on who asked. Counted in SQL because the badge endpoint
+        asks on every render and pulling rows to count them would be silly.
+        """
+        sql = (
+            "SELECT COUNT(*), "
+            "SUM(CASE WHEN assessment IN ('looks_correct','actual_issue') "
+            "THEN 1 ELSE 0 END), "
+            "SUM(CASE WHEN assessment IN ('looks_correct','actual_issue') "
+            "AND confidence >= ? THEN 1 ELSE 0 END) "
+            "FROM results WHERE assessment IS NOT NULL")
+        args: tuple = (gate,)
+        if user_key is not None:
+            sql += " AND user_key = ?"
+            args = (gate, user_key)
+        with self._conn() as c:
+            row = c.execute(sql, args).fetchone()
+        total, signal, decided = (_db.first(row, 0), _db.first(row, 1),
+                                  _db.first(row, 2))
+        return {"total": int(total or 0), "signal": int(signal or 0),
+                "decided": int(decided or 0)}
+    def signoffs(self, user_key: str | None, limit: int = 5000) -> list[dict]:
+        """Every signed-out row, with the judge's confidence and verdict.
+
+        The raw material for a calibration measured against the user's own
+        labels rather than ours. The math drops what carries no signal (see
+        calibration.report_from_signoffs); this returns the rows.
+
+        `user_key=None` means every key in the store — what a single-operator
+        local install wants from `agentcheck calibrate --from-signoffs`. The
+        HTTP path always passes a key, so a hosted workspace can never see
+        another's labels.
+        """
+        sql = ("SELECT id, ts, verdict, confidence, severity, checkset, "
+               "assessment, model FROM results WHERE assessment IS NOT NULL")
+        args: tuple = ()
+        if user_key is not None:
+            sql += " AND user_key = ?"
+            args = (user_key,)
+        sql += " ORDER BY ts DESC LIMIT ?"
+        with self._conn() as c:
+            rows = c.execute(sql, (*args, limit)).fetchall()
+        return [dict(r) for r in rows]
     def assess(self, user_key: str, result_id: str, assessment: str) -> bool:
         with self._conn() as c:
             cur = c.execute(

@@ -224,6 +224,44 @@ def build_report(judge_name: str, checkset: str, verdict_id: str,
     }
 
 
+def report_from_signoffs(rows: list[dict], judge_name: str,
+                         checkset: str = "safety", gate: float = DEFAULT_GATE,
+                         bins: int = DEFAULT_BINS) -> dict:
+    """Calibrate a judge against the human sign-outs already in the log.
+
+    No judge calls: the confidence is the one recorded with each judgment, and
+    the truth is the person who signed it out — `looks_correct` means the
+    judge was right, `actual_issue` means it was wrong, and
+    `insufficient_context` carries no signal and is dropped (the same reading
+    `trust.human_agreement` uses, so the two can never disagree).
+
+    This is the loop that makes the measured tier reachable on a user's own
+    traffic instead of ours: judge something, sign it out, get ECE over your
+    own labels. Fewer than 30 decided items is reported honestly rather than
+    dressed up — `trust.trust_score` refuses to upgrade the tier below that,
+    so a small report cannot buy a measured badge.
+    """
+    usable: list[dict] = []
+    for r in rows:
+        a = r.get("assessment")
+        if a not in ("looks_correct", "actual_issue"):
+            continue
+        conf = _finite(r.get("confidence"))
+        if conf is None:
+            continue
+        usable.append({
+            "confidence": conf,
+            "correct": a == "looks_correct",
+            # The gate decides abstention, exactly as in a live predict pass.
+            "decided": conf >= gate,
+        })
+    rep = build_report(judge_name, checkset, "verdict", usable, [],
+                       gate=gate, bins=bins)
+    rep["source"] = "signoffs"
+    rep["read"] = verdict_for_ece(rep["decided"]["ece"], rep["decided"]["n"])
+    return rep
+
+
 def calibration(judge_name: str, dataset: list[dict], checkset: str = "safety",
                 gate: float = DEFAULT_GATE, bins: int = DEFAULT_BINS,
                 judge: Any | None = None, workers: int = 1) -> dict:

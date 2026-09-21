@@ -88,6 +88,39 @@ export async function assess(id, assessment) {
     const row = state.results.find((x) => x.id === id);
     if (row) row.assessment = assessment;
     if (state.selected?.id === id) state.selected.assessment = assessment;
+    // Advance to the next call nobody has signed out. Labeling 30 items one at
+    // a time is the whole path to a measured tier, and stopping after each one
+    // made it a chore; the next unlabeled row is the only useful place to be.
+    advanceToUnassessed(id);
     renderDock(); renderLedger();
   } catch (e) { banner("Could not save your assessment: " + e.message); }
+}
+
+//: Which row to move to after a sign-out: the next one without an assessment,
+//: preferring rows below the current one so the eye keeps its place.
+function advanceToUnassessed(fromId) {
+  const rows = state.results;
+  const i = rows.findIndex((x) => x.id === fromId);
+  if (i < 0) return;
+  const after = rows.slice(i + 1).find((x) => !x.assessment);
+  const any = rows.find((x) => !x.assessment);
+  const next = after || any;
+  if (next) state.selected = next;
+}
+
+//: Labeling without the mouse: 1/2/3 sign out the selection and advance.
+//: The dock's three buttons are the same three answers, so a person can label
+//: a queue at reading speed instead of aiming at 30 targets.
+export function bindAssessKeys() {
+  document.addEventListener("keydown", (e) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const tag = (document.activeElement?.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select") return;
+    if (document.querySelector(".sheet:not([hidden])")) return;
+    const map = { "1": "looks_correct", "2": "actual_issue", "3": "insufficient_context" };
+    const assessment = map[e.key];
+    if (!assessment || !state.selected) return;
+    e.preventDefault();
+    assess(state.selected.id, assessment);
+  });
 }

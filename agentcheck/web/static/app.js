@@ -13,7 +13,7 @@ import { loadMonitor, loadDrift } from "./views/monitor.js";
 import { loadRuns, openRun } from "./views/runs.js";
 import { renderRedteamIdle, updateRedteamCost, runRedteam } from "./views/redteam.js";
 import { visible, renderCounts, signoffStats, renderLedger } from "./ledger.js";
-import { renderDock } from "./dock.js";
+import { renderDock, bindAssessKeys } from "./dock.js";
 import { setLive, load, loadUsage } from "./queue.js";
 import { renderExamples, runExample, runUpload } from "./sheets.js";
 import { gateForKey, KEY_STORE } from "./keygate.js";
@@ -338,4 +338,7 @@ async function useKey() {
 $("use-key").addEventListener("click", useKey);
 $("key-input").addEventListener("keydown", (e) => { if (e.key === "Enter") useKey(); });
 
+// 1/2/3 sign out the selected call and advance — labeling at reading speed is
+// the path to a measured tier.
+bindAssessKeys();
 boot();

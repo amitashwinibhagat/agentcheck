@@ -76,6 +76,17 @@ wedge, and it is deliberate.
 
 ## Quickstart
 
+**See the whole thing in one command** — a verdict with its reasoning, then
+the measurement that makes the confidence trustworthy:
+
+```bash
+pip install agentcheck-verify
+agentcheck quickstart        # judges 3 sample calls, then calibrates the judge
+```
+
+With no key it runs the offline stub and says so. With `OPENAI_API_KEY` (or
+`TYPESAFE_API_KEY`) it judges for real.
+
 ```bash
 mkdir agentcheck && cd agentcheck
 curl -fsSL https://raw.githubusercontent.com/amitashwinibhagat/agentcheck/main/deploy/gcp/docker-compose.yml -o docker-compose.yml
@@ -205,7 +216,6 @@ A judge that always says 0.9 is not discriminating, whatever its accuracy.
 The Trust Score measures judge behavior **on your traffic** and returns one
 number with its sample size attached — because a trust score without a sample
 size is a horoscope.
-
 ```bash
 curl -H "Authorization: Bearer $KEY" localhost:7373/v1/trust
 # {"score": 76, "verdict": "trusted", "tier": "measured", "n": 27, ...}
@@ -241,6 +251,26 @@ agentcheck calibrate --dataset agent-demo --judge openai --out report.html
 Demo datasets ship in the package; calibration works on any rubric, any judge,
 your data included. Honesty is structural: **missing labels are refused, not
 scored**; **no calibration report means the record says `uncalibrated`**.
+
+### Measure the judge on your labels, not ours
+
+The measured tier is reachable on **your own traffic** — sign judgments out in
+the log (`looks_correct` / `actual_issue`), and those labels become a real
+calibration. No dataset file, no second judge pass: the confidence is the one
+recorded with each judgment, the truth is the person who signed it out.
+
+Sign out 30 decided items and the tier moves to `measured`:
+
+```bash
+agentcheck calibrate --from-signoffs --publish
+# ECE, accuracy and the reliability table over YOUR sign-outs
+```
+
+In the UI: the **Trust** tab shows the count (`12 of 30 decided sign-outs`),
+labels at reading speed with **1 / 2 / 3** (each sign-out advances to the next
+unlabeled call), and publishes in one click. Under 30 decided items it reports
+the numbers but refuses to claim the tier, and publishing with no labels is
+refused outright rather than writing a fabricated calibration.
 
 ## Red Team
 

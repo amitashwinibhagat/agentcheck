@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import json
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fastapi import Header, Response
+from fastapi import Header, HTTPException, Request, Response
 
+from agentcheck import calibration as cal
 from agentcheck import trust
 from agentcheck.reliability import load_report
 from agentcheck.routes import shared
+
+#: Decided sign-outs required before a measured tier means anything. Mirrors
+#: the gate in trust.trust_score; stated here so the UI can show progress
+#: toward it instead of a vague "publish a calibration".
+SIGNOFFS_NEEDED = 30
 
 if TYPE_CHECKING:  # annotations only; the store is duck-typed at runtime
     from agentcheck.store import Store
@@ -44,11 +53,32 @@ def _trust_for(store: Store, key: str, checkset: str | None,
         adv = store.latest_event(key, "redteam_run")
     except Exception:
         adv = None
-    return trust.trust_score(rows, gate=gate, adversarial=adv,
-                             dataset_report=_calibration_for(store, checkset))
+    out = trust.trust_score(rows, gate=gate, adversarial=adv,
+                            dataset_report=_calibration_for(store, checkset))
+    # Progress toward the measured tier, from the user's OWN labels. The score
+    # cannot tell you how close you are; this can, and it is the one number
+    # that turns "come back later" into "eight more".
+    counts = store.signoff_counts(key, gate=gate)
+    out["signoffs"] = {**counts, "needed": SIGNOFFS_NEEDED,
+                       "remaining": max(SIGNOFFS_NEEDED - counts["decided"], 0)}
+    return out
 
 
 def register(app, store):
+    def _signoff_report(key: str, checkset: str | None, gate: float) -> dict:
+        rows = store.signoffs(key)
+        if checkset:
+            rows = [r for r in rows if r.get("checkset") == checkset]
+        rep = cal.report_from_signoffs(
+            rows, getattr(app.state, "judge", "unknown"),
+            checkset=checkset or "safety", gate=gate)
+        # Name the source. "a labeled dataset" is vague; this is the user's own
+        # traffic, and the tier note should say so.
+        rep["dataset"] = "your sign-outs"
+        rep["needed"] = SIGNOFFS_NEEDED
+        rep["meets_threshold"] = rep["decided"]["n"] >= SIGNOFFS_NEEDED
+        return rep
+
     @app.get("/v1/trust")
     async def trust_score_endpoint(authorization: str | None = Header(None),
                     checkset: str | None = None,
@@ -60,6 +90,48 @@ def register(app, store):
         """
         key = shared.authorize(store, authorization)
         return _trust_for(store, key, checkset, gate)
+
+    @app.get("/v1/calibration/signoffs")
+    async def signoff_calibration(authorization: str | None = Header(None),
+                                  checkset: str | None = None,
+                                  gate: float = 0.6):
+        """Calibrate the judge against this workspace's own sign-outs.
+
+        No judge calls and no dataset file: the confidence is the one recorded
+        with each judgment and the truth is the person who signed it out, so
+        the measured tier becomes reachable on your traffic rather than on
+        ours.
+        """
+        return _signoff_report(shared.authorize(store, authorization),
+                               checkset, gate)
+
+    @app.post("/v1/calibration/signoffs/publish")
+    async def publish_signoff_calibration(request: Request,
+                                          authorization: str | None = Header(None),
+                                          checkset: str | None = None,
+                                          gate: float = 0.6):
+        """Publish the sign-out calibration as this workspace's reliability model.
+
+        Same file the CLI writes, so both paths converge: the trust score
+        picks it up on the next request, and per-check corrections on the next
+        restart (the check pipeline loads the model at startup).
+        """
+        rep = _signoff_report(shared.authorize(store, authorization),
+                              checkset, gate)
+        if rep["decided"]["n"] == 0:
+            raise HTTPException(
+                422, "no decided sign-outs yet — sign judgments out first; a "
+                     "report with no labels would be a fabricated number")
+        home = Path(os.environ.get("AGENTCHECK_HOME", Path.home() / ".agentcheck"))
+        home.mkdir(parents=True, exist_ok=True)
+        target = home / "calibration.json"
+        target.write_text(json.dumps(rep, indent=2))
+        # The check pipeline reads the model at startup, so say so rather than
+        # implying the correction changed mid-flight.
+        return {"published": str(target), "report": rep,
+                "tier_now": "measured" if rep["meets_threshold"] else "consistency",
+                "note": "trust score updates immediately; restart serve to "
+                        "apply corrections to new checks"}
 
     @app.get("/v1/trust.svg")
     async def trust_badge(authorization: str | None = Header(None),

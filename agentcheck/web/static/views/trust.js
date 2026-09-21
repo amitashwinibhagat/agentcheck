@@ -1,8 +1,10 @@
 // Trust view: the score, its components, its tier and sample size.
 
 import { api } from "../api.js";
-import { $, esc, openSheet, TRUST_COLORS } from "../util.js";
+import { $, banner, esc, openSheet, TRUST_COLORS } from "../util.js";
 import { state } from "../state.js";
+import { renderLedger } from "../ledger.js";
+import { renderDock } from "../dock.js";
 
 export async function loadTrust() {
   const box = $("trust-out");
@@ -73,6 +75,29 @@ export async function loadTrust() {
       <span class="note">Runs the shipped agent-demo dataset (~330 judgments) — ECE and accuracy, not a vibe.</span>
       <div id="trust-cal-out"></div>
     </div>`;
+
+  // The labeling loop: the measured tier can be reached on the user's OWN
+  // labels, and the only thing standing in the way is a count. Show the count.
+  const so = d.signoffs || {};
+  const soNeeded = so.needed || 30;
+  const soDecided = so.decided || 0;
+  const labelBlock = (thin || soDecided >= soNeeded) && d.tier === "measured" ? "" : `
+    <div class="ro" style="margin:16px var(--gut)">
+      <p class="kicker">Measured tier · your labels</p>
+      <p>${soDecided} of ${soNeeded} decided sign-outs
+      ${soDecided >= soNeeded
+        ? "— enough to publish a calibration measured on your own traffic."
+        : `— ${soNeeded - soDecided} more to reach the tier 
+           <strong>on your traffic</strong> instead of the shipped dataset.`}</p>
+      <div class="rowline">
+        <button type="button" class="btn ghost" id="trust-label">Start labeling</button>
+        <button type="button" class="btn" id="trust-publish"
+                ${soDecided ? "" : "disabled"}>Publish from my ${soDecided} sign-outs</button>
+        <span class="note" id="trust-pub-status">
+          ${soDecided ? "No judge calls." : "Sign calls out first — a calibration with no labels is not a number."}
+        </span>
+      </div>
+    </div>`;
   box.innerHTML = `<div style="padding:18px var(--gut) 40px">
     <div class="trust-hero">
       <div class="trust-score" style="color:${color}">${thin ? "—" : d.score}</div>
@@ -87,6 +112,7 @@ export async function loadTrust() {
     ${emptyState}
     ${thin ? "" : `<div class="bars">${compRows}</div>`}
     ${measureButton}
+    ${labelBlock}
     <p class="hint" style="margin-top:14px">Badge for your README —
       <code>GET /v1/trust.svg</code> with your key renders it live.</p>
   </div>`;
@@ -99,6 +125,42 @@ export async function loadTrust() {
   });
   const cal = $("trust-calibrate");
   if (cal) cal.addEventListener("click", () => runDemoCalibration(cs));
+  const label = $("trust-label");
+  if (label) label.addEventListener("click", () => {
+    // Jump to the queue and select the first call nobody has signed out.
+    document.querySelector('[data-view="queue"]')?.click();
+    const next = state.results.find((r) => !r.assessment);
+    if (next) { state.selected = next; renderLedger(); renderDock(); }
+    else banner("Every call in this log is signed out — nothing left to label.", "info");
+  });
+  const pub = $("trust-publish");
+  if (pub) pub.addEventListener("click", () => publishSignoffs(pub, cs));
+}
+
+// Publish the sign-out calibration as the workspace's reliability model. Writes
+// the same file the CLI does, so the tier moves either way — and says plainly
+// that the trust number changes now while per-check corrections need a restart.
+async function publishSignoffs(btn, checkset) {
+  const status = $("trust-pub-status");
+  btn.disabled = true;
+  const was = btn.textContent;
+  btn.textContent = "Publishing…";
+  try {
+    const r = await api(`/v1/calibration/signoffs/publish` +
+                        (checkset ? `?checkset=${encodeURIComponent(checkset)}` : ""),
+                        { method: "POST", body: JSON.stringify({}) });
+    const rep = r.report || {};
+    const dd = rep.decided || {};
+    if (status) status.textContent =
+      `Published: ECE ${Number(dd.ece ?? 0).toFixed(3)}, accuracy ` +
+      `${(Number(dd.accuracy ?? 0) * 100).toFixed(0)}% over ${dd.n ?? 0} of your sign-outs. ` +
+      `${r.note || ""}`;
+    await loadTrust();
+  } catch (e) {
+    if (status) status.textContent = e.message;
+    btn.disabled = false;
+    btn.textContent = was;
+  }
 }
 
 // Run the calibration the product ships with, from the browser. This is the
