@@ -672,7 +672,41 @@ class TestWaitlist(unittest.TestCase):
         self.assertIn("waitlist", body.lower())
         # The self-host card is the one that works today, and it says so.
         self.assertIn("Start now", body)
-        self.assertIn("/v1/waitlist", body)
+        # The endpoint lives in the script file, which the page must load from
+        # a path CSP allows (an inline handler is silently dead).
+        self.assertIn("/assets/waitlist.js", body)
         # Still one currency, still no rupee.
         self.assertNotIn("₹", body)
         self.assertEqual(billing.DISPLAY_CURRENCY, "USD")
+
+
+class TestPagesSurviveTheirOwnCsp(unittest.TestCase):
+    """Caddy sends `script-src 'self'`, so an inline <script> is dead code.
+
+    The waitlist buttons did nothing in production for exactly this reason:
+    the handler was inline, the CSP refused it, and the only symptom was a
+    console error nobody reads. The pages must load their JavaScript from
+    files.
+    """
+
+    def setUp(self):
+        self.t = Tenant()
+
+    def test_no_page_carries_an_inline_script(self):
+        import re
+        for path in ("/", "/start"):
+            r = self.t.client.get(path)
+            self.assertEqual(r.status_code, 200, path)
+            inline = [m for m in re.findall(r"<script([^>]*)>", r.text)
+                      if "src=" not in m]
+            self.assertEqual(inline, [],
+                             f"{path} has an inline <script>: CSP will block it")
+            # And any script it does load must be same-origin.
+            for src in re.findall(r'<script[^>]+src="([^"]+)"', r.text):
+                self.assertTrue(src.startswith("/assets/"),
+                                f"{path} loads {src}; script-src is 'self'")
+
+    def test_the_waitlist_script_is_served(self):
+        r = self.t.client.get("/assets/waitlist.js")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("/v1/waitlist", r.text)

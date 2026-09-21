@@ -65,7 +65,10 @@ def test_start_page_matches_the_catalogue_and_does_not_lie_about_signup():
     assert "$299" in body and "$949" in body
 
     # Honesty: hosted self-serve is not open. A CTA that 404s is worse than none.
-    assert "not yet enabled" in body.lower() or "not enabled" in body.lower()
+    lowered = body.lower()
+    assert "not open yet" in lowered or "not enabled" in lowered, \
+        "the page must say hosted is not open"
+    assert "waitlist" in lowered, "a card with no action is decoration"
     assert 'href="/v1/auth/login"' not in body
     # A marketing page must not be a back door into the product. The logo
     # stays on /start; CTAs go to self-host / GitHub, never to `/`.
