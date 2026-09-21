@@ -47,10 +47,15 @@ def test_start_page_matches_the_catalogue_and_does_not_lie_about_signup():
     assert "Self-host, free forever" in body or "Self-host" in body
     assert "Apache" in body
     for name, plan in billing.PLANS.items():
-        price = plan["price_inr"]
+        price = plan["price"]
+        usd = plan.get("price_usd")
         if price:
             assert f"{price:,}" in body or str(price) in body, \
                 f"catalogue price {price} for {name} missing from /start"
+        if usd:
+            # The headline an international buyer budgets against.
+            assert f"${usd:,}" in body or f"${usd}" in body, \
+                f"USD display price {usd} for {name} missing from /start"
         if plan["allowance"]:
             assert str(plan["allowance"]) in body.replace(",", ""), \
                 f"allowance {plan['allowance']} for {name} missing from /start"

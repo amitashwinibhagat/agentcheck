@@ -48,6 +48,7 @@
   .plan .name{font:600 13px/1 var(--ui);letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim)}
   .plan .price{font:700 28px/1.1 var(--ui);letter-spacing:-.03em;margin:12px 0 6px}
   .plan .price small{font:400 13px/1 var(--ui);color:var(--text-dim);letter-spacing:0}
+  .plan .charged{color:var(--text-dim);font-size:12px;margin:0 0 4px}
   .plan ul{margin:12px 0 0;padding:0;list-style:none;color:var(--text-dim);font-size:13px;line-height:1.55}
   .plan li{padding:3px 0}
   .caveat{color:var(--text-dim);font-size:13px;line-height:1.55;margin:16px 0 0;max-width:42rem}
@@ -129,7 +130,7 @@
     <div class="plan-grid">
       <article class="plan hl">
         <div class="name">Self-host</div>
-        <div class="price">₹0 <small>/ forever</small></div>
+        <div class="price">$0 <small>/ forever</small></div>
         <ul>
           <li>Your machine, your data, your judge key</li>
           <li>SQLite by default, Postgres when you outgrow it</li>
@@ -139,7 +140,7 @@
       </article>
       <article class="plan">
         <div class="name">Hosted free</div>
-        <div class="price">₹0 <small>/ mo</small></div>
+        <div class="price">$0 <small>/ mo</small></div>
         <ul>
           <li>500 judged questions / month</li>
           <li>600 questions / minute</li>
@@ -149,7 +150,8 @@
       </article>
       <article class="plan">
         <div class="name">Pro</div>
-        <div class="price">₹24,999 <small>/ mo</small></div>
+        <div class="price">$299 <small>/ mo</small></div>
+        <div class="charged">billed ₹24,999 (INR)</div>
         <ul>
           <li>50,000 questions / month</li>
           <li>4,000 questions / minute</li>
@@ -159,7 +161,8 @@
       </article>
       <article class="plan">
         <div class="name">Team</div>
-        <div class="price">₹79,999 <small>/ mo</small></div>
+        <div class="price">$949 <small>/ mo</small></div>
+        <div class="charged">billed ₹79,999 (INR)</div>
         <ul>
           <li>250,000 questions / month</li>
           <li>20,000 questions / minute</li>
@@ -168,6 +171,10 @@
         </ul>
       </article>
     </div>
+    <p class="caveat">Priced in USD because that is the budget line a team already
+    has; <strong>charged in INR</strong> because the live payment account settles
+    INR, so the figure PayPal-or-card shows will be ₹. If you need USD
+    invoicing, say so — it is a provider setting, not a repricing.</p>
     <article class="plan" style="margin-top:10px;min-height:0;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center">
       <div>
         <div class="name">Enterprise</div>

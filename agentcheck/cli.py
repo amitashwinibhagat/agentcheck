@@ -1570,16 +1570,18 @@ def billing_cmd(plan: str | None) -> None:
     for col in ("plan", "allowance/mo", "qpm", "price", "provider plan id"):
         t.add_column(col)
     for p in billing.plans_public():
-        if p.get("price_inr") is None:
+        if p.get("price") is None:
             pid, price = "custom", "custom"
-        elif not p.get("price_inr"):
+        elif not p.get("price"):
             pid, price = "-", "free"
         else:
             try:
                 pid = billing.plan_id_for(p["name"])
             except billing.BillingError:
                 pid = "[red]not set[/red]"
-            price = f"INR {p['price_inr']:,}"
+            # Charged first, display second: the USD figure is what an
+            # international buyer budgets against, the INR is what is debited.
+            price = f"USD {p['price_usd']:,} (billed {p['currency']} {p['price']:,})"
         t.add_row(
             p["name"], f"{p['allowance']:,} questions", f"{p['qpm']:,}/min",
             price, pid)

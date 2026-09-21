@@ -33,15 +33,30 @@ import os
 # Self-host stays ₹0 forever (Apache-2.0); that is the indie path, not a
 # discount on hosted. Enterprise is deliberately unpriced on the public
 # grid: annual contract, SSO/DPA/audit, not a fourth monthly card.
+#
+# CURRENCY. `price` + `currency` are what the payment provider actually
+# charges, and today that is Razorpay settling INR into an Indian account —
+# the currency is a property of each provider plan object, not a decision this
+# catalogue made. `price_usd` is the DISPLAY price for an international buyer,
+# who cannot put ₹79,999 in a budget line. Both are hand-set on purpose:
+# computing one from the other at render time would print a number that drifts
+# with FX and is not what anyone is charged. Changing the CHARGE currency
+# means a provider that settles USD (Razorpay international, or a
+# merchant-of-record like Dodo, which `Provider` already anticipates) — not
+# editing these numbers.
 PLANS: dict[str, dict] = {
     "free": {"allowance": 500, "qpm": 600, "label": "Free", "seats": 1,
-             "price_inr": 0, "blurb": "Try it on one rubric."},
+             "price": 0, "currency": "INR", "price_usd": 0,
+             "blurb": "Try it on one rubric."},
     "pro": {"allowance": 50000, "qpm": 4000, "label": "Pro", "seats": 5,
-             "price_inr": 24999, "blurb": "One production agent, in production."},
+            "price": 24999, "currency": "INR", "price_usd": 299,
+            "blurb": "One production agent, in production."},
     "team": {"allowance": 250000, "qpm": 20000, "label": "Team", "seats": 15,
-             "price_inr": 79999, "blurb": "Several agents, one audit trail."},
+             "price": 79999, "currency": "INR", "price_usd": 949,
+             "blurb": "Several agents, one audit trail."},
     "enterprise": {"allowance": 0, "qpm": 0, "label": "Enterprise", "seats": 0,
-                   "price_inr": None, "blurb": "SSO, DPA, audit export. Annual."},
+                   "price": None, "currency": None, "price_usd": None,
+                   "blurb": "SSO, DPA, audit export. Annual."},
 }
 
 # Razorpay plan ids are per-environment, so they come from config.
