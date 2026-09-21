@@ -30,5 +30,6 @@ from agentcheck.routes import results
 from agentcheck.routes import runs
 from agentcheck.routes import stream
 from agentcheck.routes import trust
+from agentcheck.routes import waitlist
 from agentcheck.routes import workspace
 from agentcheck.routes import workspaces

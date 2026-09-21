@@ -47,11 +47,7 @@ def test_start_page_matches_the_catalogue_and_does_not_lie_about_signup():
     assert "Self-host, free forever" in body or "Self-host" in body
     assert "Apache" in body
     for name, plan in billing.PLANS.items():
-        price = plan["price"]
         usd = plan.get("price_usd")
-        if price:
-            assert f"{price:,}" in body or str(price) in body, \
-                f"catalogue price {price} for {name} missing from /start"
         if usd:
             # The headline an international buyer budgets against.
             assert f"${usd:,}" in body or f"${usd}" in body, \
@@ -60,6 +56,14 @@ def test_start_page_matches_the_catalogue_and_does_not_lie_about_signup():
             assert str(plan["allowance"]) in body.replace(",", ""), \
                 f"allowance {plan['allowance']} for {name} missing from /start"
     assert "Custom" in body and "Enterprise" in body
+    # One currency, and it is the one the customer budgets in. A page that
+    # advertises dollars while the rail debits rupees is a bait-and-switch;
+    # checkout refuses that combination server-side (billing.display_mismatch),
+    # so the page must never print the charge currency either.
+    assert "₹" not in body and "INR" not in body, \
+        "the pricing page advertises the payment rail's currency"
+    assert "$299" in body and "$949" in body
+
     # Honesty: hosted self-serve is not open. A CTA that 404s is worse than none.
     assert "not yet enabled" in body.lower() or "not enabled" in body.lower()
     assert 'href="/v1/auth/login"' not in body

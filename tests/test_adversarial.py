@@ -608,3 +608,71 @@ class TestCalibrationIsPerTenant(unittest.TestCase):
         self.assertEqual(after.get("dataset"), before.get("dataset"))
         self.assertEqual(len([f for f in os.listdir(self.home)
                               if f.startswith("calibration-")]), 2)
+
+
+class TestWaitlist(unittest.TestCase):
+    """The one public write, so it is the one to guard."""
+
+    def setUp(self):
+        os.environ["AGENTCHECK_SECRET"] = SECRET
+        # The limiter is process state by design (it guards a public write);
+        # clear it so one test's traffic cannot 429 the next.
+        from agentcheck.routes import waitlist as wl
+        wl._seen.clear()
+        self.t = Tenant()
+
+    def test_a_prospect_can_join_without_a_key(self):
+        r = self.t.client.post("/v1/waitlist",
+                               json={"email": "buyer@acme.test", "plan": "pro"})
+        self.assertEqual(r.status_code, 200, r.text)
+        self.assertTrue(r.json()["ok"])
+        self.assertFalse(r.json()["already_on_list"])
+        # The operator can see it; the public cannot.
+        listing = self.t.client.get("/v1/waitlist", headers=self.t.ha).json()
+        self.assertEqual([s["email"] for s in listing["signups"]],
+                         ["buyer@acme.test"])
+
+    def test_the_list_is_not_public(self):
+        self.t.client.post("/v1/waitlist", json={"email": "someone@acme.test"})
+        self.assertEqual(self.t.client.get("/v1/waitlist").status_code, 401)
+        # The count is public, the addresses never are.
+        c = self.t.client.get("/v1/waitlist/count")
+        self.assertEqual(c.status_code, 200)
+        self.assertEqual(c.json()["n"], 1)
+        self.assertNotIn("someone@acme.test", c.text)
+
+    def test_joining_twice_is_not_two_prospects(self):
+        first = self.t.client.post("/v1/waitlist", json={"email": "a@b.test"})
+        second = self.t.client.post("/v1/waitlist", json={"email": "A@B.TEST"})
+        self.assertFalse(first.json()["already_on_list"])
+        self.assertTrue(second.json()["already_on_list"])
+        self.assertEqual(self.t.client.get("/v1/waitlist",
+                                           headers=self.t.ha).json()["n"], 1)
+
+    def test_a_bad_address_is_refused_and_nothing_is_stored(self):
+        for bad in ("nope", "", "a b@c.test", "x" * 250 + "@y.test"):
+            r = self.t.client.post("/v1/waitlist", json={"email": bad})
+            self.assertIn(r.status_code, (422,), f"{bad[:12]!r} -> {r.status_code}")
+        self.assertEqual(self.t.client.get("/v1/waitlist",
+                                           headers=self.t.ha).json()["n"], 0)
+
+    def test_the_public_write_is_rate_limited(self):
+        codes = [self.t.client.post("/v1/waitlist",
+                                    json={"email": f"{i}@flood.test"}).status_code
+                 for i in range(8)]
+        self.assertIn(429, codes, f"a public write had no ceiling: {codes}")
+
+    def test_the_page_offers_a_door_on_every_hosted_card(self):
+        """The complaint that started this: three cards promising a product
+        with nothing to click."""
+        from agentcheck import billing
+        body = self.t.client.get("/start").text
+        self.assertEqual(body.count("data-waitlist="), 3,
+                         "every hosted tier needs an action")
+        self.assertIn("waitlist", body.lower())
+        # The self-host card is the one that works today, and it says so.
+        self.assertIn("Start now", body)
+        self.assertIn("/v1/waitlist", body)
+        # Still one currency, still no rupee.
+        self.assertNotIn("₹", body)
+        self.assertEqual(billing.DISPLAY_CURRENCY, "USD")

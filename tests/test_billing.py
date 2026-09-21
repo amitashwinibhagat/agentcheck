@@ -308,3 +308,55 @@ class TestWebhookEndpoint(unittest.TestCase):
         r = self.client.post("/v1/billing/checkout",
                              json={"plan": "enterprise-unlimited"}, headers=h)
         self.assertEqual(r.status_code, 422)
+
+
+class TestCurrencyHonesty(unittest.TestCase):
+    """Never advertise one currency and debit another.
+
+    The live Razorpay account settles INR and REFUSES currency=USD (verified:
+    "Currency provided is not supported"), so a USD pricing page plus an INR
+    checkout is a bait-and-switch waiting at the payment step. Checkout refuses
+    instead of charging, until a USD-settling provider is wired.
+    """
+
+    def _client(self):
+        import tempfile
+        from pathlib import Path
+        from fastapi.testclient import TestClient
+        from agentcheck.proxy import create_app
+        from agentcheck.store import Store
+        store = Store(Path(tempfile.mkdtemp()) / "cur.db")
+        key = store.create_key("a", qpm_limit=600)
+        app = create_app(store, default_judge="stub")
+        return TestClient(app, base_url="https://app.test"), key
+
+    def test_the_advertised_currency_is_explicit(self):
+        from agentcheck import billing
+        self.assertEqual(billing.DISPLAY_CURRENCY, "USD")
+
+    def test_a_paid_tier_whose_charge_currency_differs_is_not_sellable(self):
+        from agentcheck import billing
+        self.assertTrue(billing.display_mismatch("pro"),
+                        "INR plans behind a USD page must be refused")
+        self.assertFalse(billing.display_mismatch("free"),
+                         "free has no charge currency to mismatch")
+
+    def test_checkout_refuses_rather_than_charging_a_hidden_currency(self):
+        import os
+        os.environ["AGENTCHECK_BILLING"] = "razorpay"
+        os.environ["RAZORPAY_KEY_ID"] = "rzp_test_key"
+        os.environ["RAZORPAY_KEY_SECRET"] = "secret"
+        os.environ["RAZORPAY_PLAN_ID_PRO"] = "plan_x"
+        try:
+            client, key = self._client()
+            r = client.post("/v1/billing/checkout",
+                            headers={"Authorization": f"Bearer {key}"},
+                            json={"plan": "pro"})
+            self.assertEqual(r.status_code, 503, r.text)
+            self.assertIn("USD", r.text)
+            self.assertIn("INR", r.text)
+            self.assertIn("disabled", r.text)
+        finally:
+            for k in ("AGENTCHECK_BILLING", "RAZORPAY_KEY_ID",
+                      "RAZORPAY_KEY_SECRET", "RAZORPAY_PLAN_ID_PRO"):
+                os.environ.pop(k, None)

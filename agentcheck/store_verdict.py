@@ -330,3 +330,30 @@ class VerdictMixin:
             "policy": row.get("policy"),
             "duplicate": row.get("duplicate", False),
         }
+
+    # ── waitlist: demand before there is anything to sell ──────────────────
+    def join_waitlist(self, email: str, plan: str | None = None,
+                      note: str | None = None) -> bool:
+        """Record interest. Returns False when already on the list.
+
+        Deliberately idempotent: someone clicking twice is not two prospects,
+        and a count that double-counts is worse than no count. The rows are
+        small and a real signup flow replaces them.
+        """
+        e = str(email).strip().lower()
+        if "@" not in e or len(e) > 200 or " " in e:
+            raise ValueError("a valid email address is required")
+        with self._conn() as c:
+            exists = c.execute("SELECT 1 FROM waitlist WHERE email = ?",
+                               (e,)).fetchone()
+            if exists is not None:
+                return False
+            c.execute("INSERT INTO waitlist (email, created, plan, note) "
+                      "VALUES (?,?,?,?)", (e, time.time(), plan, note))
+        return True
+
+    def waitlist(self) -> list[dict]:
+        with self._conn() as c:
+            rows = c.execute("SELECT email, created, plan, note FROM waitlist "
+                             "ORDER BY created DESC").fetchall()
+        return [dict(r) for r in rows]

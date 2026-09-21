@@ -48,7 +48,17 @@
   .plan .name{font:600 13px/1 var(--ui);letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim)}
   .plan .price{font:700 28px/1.1 var(--ui);letter-spacing:-.03em;margin:12px 0 6px}
   .plan .price small{font:400 13px/1 var(--ui);color:var(--text-dim);letter-spacing:0}
-  .plan .charged{color:var(--text-dim);font-size:12px;margin:0 0 4px}
+  .plan .tag{font:600 10px/1 var(--ui);letter-spacing:.08em;color:var(--text-dim);
+    border:1px solid var(--rule2);border-radius:2px;padding:3px 6px;margin-left:6px;
+    vertical-align:1px;text-transform:uppercase;white-space:nowrap}
+  .plan-cta{margin-top:16px}
+  .plan-cta .btn{width:100%;display:inline-flex;justify-content:center;text-align:center}
+  .waitlist{border:1px solid var(--cardline);background:#1a1814;padding:18px;margin-top:10px}
+  .waitlist label{display:block;font:600 13px/1.4 var(--ui);margin-bottom:10px}
+  .wl-row{display:flex;gap:8px;flex-wrap:wrap}
+  .wl-row input{flex:1 1 240px;background:#12100d;border:1px solid var(--rule);
+    border-radius:2px;color:var(--text);font:400 13px/1 var(--ui);padding:10px 12px}
+  .wl-note{color:var(--text-dim);font-size:12px;margin:10px 0 0;min-height:16px}
   .plan ul{margin:12px 0 0;padding:0;list-style:none;color:var(--text-dim);font-size:13px;line-height:1.55}
   .plan li{padding:3px 0}
   .caveat{color:var(--text-dim);font-size:13px;line-height:1.55;margin:16px 0 0;max-width:42rem}
@@ -137,9 +147,12 @@
           <li><code>pip install agentcheck-verify</code></li>
           <li><code>agentcheck quickstart</code></li>
         </ul>
+        <div class="plan-cta">
+          <a class="btn" href="https://github.com/amitashwinibhagat/agentcheck/blob/main/docs/SELFHOST.md">Start now — free</a>
+        </div>
       </article>
       <article class="plan">
-        <div class="name">Hosted free</div>
+        <div class="name">Hosted free <span class="tag">waitlist</span></div>
         <div class="price">$0 <small>/ mo</small></div>
         <ul>
           <li>500 judged questions / month</li>
@@ -147,34 +160,53 @@
           <li>1 seat</li>
           <li>Try it on one rubric</li>
         </ul>
+        <div class="plan-cta">
+          <button type="button" class="btn ghost" data-waitlist="free">Join the waitlist</button>
+        </div>
       </article>
       <article class="plan">
-        <div class="name">Pro</div>
+        <div class="name">Pro <span class="tag">waitlist</span></div>
         <div class="price">$299 <small>/ mo</small></div>
-        <div class="charged">billed ₹24,999 (INR)</div>
         <ul>
           <li>50,000 questions / month</li>
           <li>4,000 questions / minute</li>
           <li>5 seats</li>
           <li>One production agent, in production</li>
         </ul>
+        <div class="plan-cta">
+          <button type="button" class="btn ghost" data-waitlist="pro">Join the waitlist</button>
+        </div>
       </article>
       <article class="plan">
-        <div class="name">Team</div>
+        <div class="name">Team <span class="tag">waitlist</span></div>
         <div class="price">$949 <small>/ mo</small></div>
-        <div class="charged">billed ₹79,999 (INR)</div>
         <ul>
           <li>250,000 questions / month</li>
           <li>20,000 questions / minute</li>
           <li>15 seats</li>
           <li>Several agents, one audit trail</li>
         </ul>
+        <div class="plan-cta">
+          <button type="button" class="btn ghost" data-waitlist="team">Join the waitlist</button>
+        </div>
       </article>
     </div>
-    <p class="caveat">Priced in USD because that is the budget line a team already
-    has; <strong>charged in INR</strong> because the live payment account settles
-    INR, so the figure PayPal-or-card shows will be ₹. If you need USD
-    invoicing, say so — it is a provider setting, not a repricing.</p>
+    <div class="waitlist" id="waitlist-form" hidden>
+      <form id="wl-form" novalidate>
+        <label for="wl-email">Email, and we will tell you when hosted sign-up opens</label>
+        <div class="wl-row">
+          <input id="wl-email" type="email" required autocomplete="email"
+                 placeholder="you@company.com" spellcheck="false">
+          <button class="btn" type="submit" id="wl-submit">Join</button>
+          <button class="btn ghost" type="button" id="wl-cancel">Not now</button>
+        </div>
+        <p class="wl-note" id="wl-status" role="status" aria-live="polite"></p>
+      </form>
+    </div>
+    <p class="caveat" id="wl-count" hidden></p>
+    <p class="caveat">Prices in USD. Hosted is not open yet: sign-up is built,
+    USD billing is not wired, so these are a waitlist rather than a checkout.
+    Self-host is free and works today.</p>
     <article class="plan" style="margin-top:10px;min-height:0;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center">
       <div>
         <div class="name">Enterprise</div>
@@ -203,5 +235,80 @@ agentcheck serve --port 7373</pre>
     <span>Numbers carry their sample size. Missing labels are refused, not scored.</span>
   </footer>
 </div>
+<script>
+/* The hosted cards are a waitlist, so every one of them has to DO something.
+   Plain script, no framework: this page is the only marketing surface, and it
+   should not need a build step to collect an address. */
+(function () {
+  var form = document.getElementById('waitlist-form');
+  var email = document.getElementById('wl-email');
+  var status = document.getElementById('wl-status');
+  var submit = document.getElementById('wl-submit');
+  var plan = 'unsure';
+
+  function open(which) {
+    plan = which;
+    form.hidden = false;
+    var label = document.querySelector('.waitlist label');
+    if (label) {
+      label.textContent = 'Email, and we will tell you when ' +
+        (which === 'free' ? 'the free hosted tier' : which + '') + ' opens';
+    }
+    email.focus();
+  }
+
+  document.querySelectorAll('[data-waitlist]').forEach(function (b) {
+    b.addEventListener('click', function () { open(b.dataset.waitlist); });
+  });
+  document.getElementById('wl-cancel').addEventListener('click', function () {
+    form.hidden = true; status.textContent = '';
+  });
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var v = (email.value || '').trim();
+    if (!v || v.indexOf('@') < 0) {
+      status.textContent = 'That does not look like an email address.';
+      return;
+    }
+    submit.disabled = true;
+    status.textContent = 'Sending…';
+    fetch('/v1/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: v, plan: plan })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        submit.disabled = false;
+        if (!res.ok) {
+          status.textContent = (res.d && res.d.detail) || 'Could not save that; try again.';
+          return;
+        }
+        status.textContent = res.d.already_on_list
+          ? 'You are already on the list — we will be in touch.'
+          : 'On the list. Meanwhile, self-host is free and works today.';
+        email.value = '';
+        count();
+      })
+      .catch(function () {
+        submit.disabled = false;
+        status.textContent = 'Could not reach the server; try again.';
+      });
+  });
+
+  // Social proof only once it exists. An empty "0 waiting" is worse than none.
+  function count() {
+    fetch('/v1/waitlist/count').then(function (r) { return r.json(); })
+      .then(function (d) {
+        var el = document.getElementById('wl-count');
+        if (d && d.n > 2) {
+          el.hidden = false;
+          el.textContent = d.n + ' teams are waiting for hosted sign-up.';
+        }
+      }).catch(function () { /* the page still reads fine without it */ });
+  }
+  count();
+})();
+</script>
 </body>
 </html>

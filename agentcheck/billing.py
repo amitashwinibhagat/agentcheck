@@ -59,6 +59,40 @@ PLANS: dict[str, dict] = {
                    "blurb": "SSO, DPA, audit export. Annual."},
 }
 
+#: What every customer-facing surface shows. Prices are published in USD
+#: because that is the budget line a team already has; the only payment account
+#: wired today settles INR (verified: Razorpay refuses currency=USD on this
+#: account with "Currency provided is not supported"). A page that advertises
+#: dollars and a checkout that debits rupees is a bait-and-switch, so the
+#: mismatch is a REFUSAL below rather than a footnote on the pricing page.
+DISPLAY_CURRENCY = "USD"
+
+
+def charge_currency(plan_name: str) -> str | None:
+    """The currency the provider would actually debit for this tier."""
+    p = PLANS.get(plan_name) or {}
+    return p.get("currency")
+
+
+def display_mismatch(plan_name: str) -> bool:
+    """True when we would advertise one currency and charge another.
+
+    Selling on this gap is exactly the kind of plausible-but-untrue number
+    this product exists to refuse. Until a USD-settling provider is wired
+    (Razorpay international, or a merchant-of-record such as Dodo, which
+    `Provider` already anticipates), paid tiers are not sellable online.
+
+    A tier that debits nothing (free, or the unpriced Enterprise row) has no
+    charge currency to disagree with, so it is not a mismatch — checkout
+    refuses those separately, for the reason that they are not sellable.
+    """
+    p = PLANS.get(plan_name) or {}
+    if not p.get("price"):
+        return False
+    cur = p.get("currency")
+    return bool(cur) and cur != DISPLAY_CURRENCY
+
+
 # Razorpay plan ids are per-environment, so they come from config.
 _PLAN_ENV = {"pro": "RAZORPAY_PLAN_ID_PRO", "team": "RAZORPAY_PLAN_ID_TEAM"}
 

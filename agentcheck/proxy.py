@@ -105,6 +105,9 @@ def create_app(store: Store, default_judge: str | None = None,
 
     routes.workspaces.register(app, store)
 
+    # ── the public waitlist (one unauthenticated write, guarded) ───────
+    routes.waitlist.register(app, store)
+
     # ── billing ────────────────────────────────────────────
     routes.billing.register(app, store)
 

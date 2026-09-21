@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import click
@@ -1556,6 +1557,38 @@ def auth_cmd() -> None:
     return
 
 
+@cli.command(name="waitlist")
+def waitlist_cmd() -> None:
+    """Who wants hosted, before there is anything to sell.
+
+    The pricing page has no checkout yet, so sign-ups are the only demand
+    signal that exists. Addresses are other people's data; this reads them
+    from the local store, for the operator.
+    """
+    store = _store(None)
+    rows = store.waitlist()
+    if not rows:
+        console.print("[dim]nobody on the waitlist yet.[/dim]")
+        console.print("The pricing page at /start collects them; the endpoint "
+                      "is POST /v1/waitlist.")
+        return
+    by_plan: dict[str, int] = {}
+    for r in rows:
+        by_plan[r.get("plan") or "unsure"] = by_plan.get(r.get("plan")
+                                                          or "unsure", 0) + 1
+    t = Table(title=f"waitlist: {len(rows)} sign-ups")
+    t.add_column("when")
+    t.add_column("email")
+    t.add_column("plan")
+    for r in rows:
+        t.add_row(
+            time.strftime("%Y-%m-%d %H:%M", time.localtime(r["created"])),
+            r["email"], r.get("plan") or "-")
+    console.print(t)
+    console.print("by plan: " + ", ".join(f"{k} {v}" for k, v in
+                                        sorted(by_plan.items())))
+
+
 @cli.command(name="billing")
 @click.option("--plan", default=None, help="show the provider id needed for a tier")
 def billing_cmd(plan: str | None) -> None:
@@ -1579,9 +1612,13 @@ def billing_cmd(plan: str | None) -> None:
                 pid = billing.plan_id_for(p["name"])
             except billing.BillingError:
                 pid = "[red]not set[/red]"
-            # Charged first, display second: the USD figure is what an
-            # international buyer budgets against, the INR is what is debited.
-            price = f"USD {p['price_usd']:,} (billed {p['currency']} {p['price']:,})"
+            # The published price is the USD figure. The provider's own
+            # currency is shown BESIDE it for the operator, never on a
+            # customer surface: a page that advertises dollars and debits
+            # rupees is a bait-and-switch, and checkout refuses that pairing.
+            price = f"USD {p['price_usd']:,}"
+            if p.get("currency") and p["currency"] != billing.DISPLAY_CURRENCY:
+                price += f" [red]provider settles {p['currency']} — not sellable[/red]"
         t.add_row(
             p["name"], f"{p['allowance']:,} questions", f"{p['qpm']:,}/min",
             price, pid)

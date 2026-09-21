@@ -85,6 +85,17 @@ CREATE TABLE IF NOT EXISTS events (
     props_json TEXT
 );
 
+-- Demand, before there is anything to sell. The pricing page listed hosted
+-- tiers with no action on them: a card that promises a product nobody can
+-- obtain is decoration, and it left the founder with no signal about whether
+-- anyone wants the hosted thing at all.
+CREATE TABLE IF NOT EXISTS waitlist (
+    email TEXT PRIMARY KEY,
+    created REAL NOT NULL,
+    plan TEXT,
+    note TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_key, event, ts);
 
 CREATE TABLE IF NOT EXISTS workspaces (

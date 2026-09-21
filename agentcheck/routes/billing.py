@@ -29,6 +29,14 @@ def register(app, store):
             billing.plan(plan_name)
         except billing.BillingError as e:
             raise HTTPException(422, str(e)) from None
+        if billing.display_mismatch(plan_name):
+            # Refuse rather than debit a currency the customer was not shown.
+            raise HTTPException(
+                503,
+                f"{plan_name} is priced in {billing.DISPLAY_CURRENCY} but the "
+                f"configured payment provider settles "
+                f"{billing.charge_currency(plan_name)}; checkout is disabled "
+                f"until USD billing is configured. Self-host is free today.")
         provider = billing.get_provider()
         if not provider.configured():
             raise HTTPException(
