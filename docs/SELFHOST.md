@@ -8,7 +8,7 @@ ten-minute path; the full cloud runbook is [DEPLOY-GCP.md](DEPLOY-GCP.md).
 ## What you need
 
 - Docker (or Python 3.11+)
-- A judge key: **any OpenAI-compatible key** (`OPENAI_API_KEY` — OpenAI,
+- A judge key: **any OpenAI-compatible key** (`OPENAI_API_KEY` covers OpenAI,
   OpenRouter, Together, a local vLLM/Ollama via `OPENAI_BASE_URL`) or a
   TypeSafe key (`TYPESAFE_API_KEY`). No key at all also works: an offline stub
   judge keeps everything runnable, it just grades deterministically.
@@ -42,7 +42,7 @@ Back it up like any SQLite file (see `DEPLOY-GCP.md` §"Keeping data").
 ```bash
 pip install agentcheck-verify        # or: pip install -e . from a checkout
 agentcheck init                      # creates the store, live-tests the judge
-agentcheck key my-laptop             # prints an API key once — paste it in the UI
+agentcheck key my-laptop             # prints an API key once; paste it in the UI
 agentcheck serve --port 7373
 open http://localhost:7373/
 ```
@@ -75,7 +75,7 @@ None of these are required; a self-host with just a judge key is complete.
 
 ## Upgrading
 
-Pull the newer image (or `git pull && pip install -e .`) and restart — the
+Pull the newer image (or `git pull && pip install -e .`) and restart. The
 store migrates itself on boot. Releases are tagged; read `CHANGELOG.md`
 before jumping majors.
 

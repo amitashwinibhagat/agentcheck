@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AgentCheck — calibrated verification for agent tool calls</title>
+<title>AgentCheck: calibrated verification for agent tool calls</title>
 <meta name="description" content="Judge every tool call. Correct the confidence against measured reality. Floor it with deterministic screens. Prove it with ECE, a Trust Score, and a 467-attack red-team suite.">
-<meta property="og:title" content="AgentCheck — your agent just called a tool. Did it do the right thing?">
+<meta property="og:title" content="AgentCheck. Your agent just called a tool. Did it do the right thing?">
 <meta property="og:description" content="Calibrated verification for agent tool calls. 467 attacks, 3.2% ASR. Self-host free forever.">
 <meta property="og:type" content="website">
 <link rel="icon" href="/assets/icons/favicon.ico" sizes="any">
@@ -93,7 +93,7 @@
     <h1>Your agent just called a tool.<br>Did it do the right thing?</h1>
     <p>Judge every tool call. Correct the confidence against measured reality.
        Floor it with deterministic screens an LLM cannot be talked out of.
-       Prove it — ECE, a Trust Score with its sample size, and a 467-attack
+       Prove it: ECE, a Trust Score with its sample size, and a 467-attack
        red-team suite.</p>
     <div class="lp-ctas">
       <a class="btn" href="https://github.com/amitashwinibhagat/agentcheck/blob/main/docs/SELFHOST.md">Self-host, free forever</a>
@@ -111,23 +111,23 @@
   <figure class="shot">
     <img src="https://raw.githubusercontent.com/amitashwinibhagat/agentcheck/main/docs/screenshots/decision-log.png"
          alt="The Decision Log: a fail explained in plain language, with the policy decision attached">
-    <figcaption>A live fail. The request said “back up the customer list”; the agent posted customers.csv to a collector. The dock says so in English.</figcaption>
+    <figcaption>A live fail. The request said "back up the customer list"; the agent posted customers.csv to a collector. The dock says so in English.</figcaption>
   </figure>
 
   <div class="split">
     <div>
       <h2>How a call is judged</h2>
-      <p>Not a score. A decision, with the reasoning that produced it, persisted so you can still answer “what did we tell you to do?” months later.</p>
+      <p>Not a score. A decision, with the reasoning that produced it, persisted so you can still answer "what did we tell you to do?" months later.</p>
       <ol>
         <li>Decompose the call into atomic questions. Batch them. One round trip.</li>
         <li>Correct the confidence against measured accuracy. A 0.9 from a judge that is right 70% of the time reads as what it is.</li>
         <li>Floor it. Deterministic screens only ever downgrade pass → review. Worst case is one more human look.</li>
-        <li>Decide: approve, human, or block — from a policy you wrote.</li>
+        <li>Decide: approve, human, or block, using a policy you wrote.</li>
       </ol>
     </div>
     <div>
       <h2>Bring your own judge</h2>
-      <p>Any OpenAI-compatible key via <code>OPENAI_API_KEY</code> / <code>OPENAI_BASE_URL</code> — OpenAI, OpenRouter, vLLM, Ollama. Or a TypeSafe key. Or nothing: an offline stub keeps every feature runnable, and the UI says so.</p>
+      <p>Any OpenAI-compatible key via <code>OPENAI_API_KEY</code> / <code>OPENAI_BASE_URL</code>, so OpenAI, OpenRouter, vLLM and Ollama all work. Or a TypeSafe key. Or nothing: an offline stub keeps every feature runnable, and the UI says so.</p>
       <p>Swap judges by writing one adapter file. Every calibration report names the judge that measured it, so switching vendors is a cost, not a rewrite.</p>
       <p><a href="https://github.com/amitashwinibhagat/agentcheck/blob/main/docs/WHY-NOT-KEYWORDS.md">Why not just a keyword filter?</a>
          Same 467 attacks: ~75% ASR against literals, 3.2% against a judge with screens. And when a regex really is the right answer.</p>
@@ -136,7 +136,7 @@
 
   <section class="plans" id="pricing">
     <h2>Pricing</h2>
-    <p class="caveat">Self-host is Apache-2.0, including commercial use — no license key, no phone-home. That is the indie path, not a discount on hosted. Hosted is a control plane, priced like one, and it is not open yet: the working path today is self-host.</p>
+    <p class="caveat">Self-host is Apache-2.0, including commercial use. No license key, no phone-home. That is the indie path, not a discount on hosted. Hosted is a control plane, priced like one, and it is not open yet: the working path today is self-host.</p>
     <div class="plan-grid">
       <article class="plan hl">
         <div class="name">Self-host</div>
@@ -148,7 +148,7 @@
           <li><code>agentcheck quickstart</code></li>
         </ul>
         <div class="plan-cta">
-          <a class="btn" href="https://github.com/amitashwinibhagat/agentcheck/blob/main/docs/SELFHOST.md">Start now — free</a>
+          <a class="btn" href="https://github.com/amitashwinibhagat/agentcheck/blob/main/docs/SELFHOST.md">Start now, free</a>
         </div>
       </article>
       <article class="plan">
@@ -210,7 +210,7 @@
     <article class="plan" style="margin-top:10px;min-height:0;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center">
       <div>
         <div class="name">Enterprise</div>
-        <p class="caveat" style="margin:8px 0 0">Annual contract. SSO, DPA, audit export, dedicated support. Not a monthly SKU — priced in a conversation, not a grid.</p>
+        <p class="caveat" style="margin:8px 0 0">Annual contract. SSO, DPA, audit export, dedicated support. Not a monthly SKU. Priced in a conversation, not a grid.</p>
       </div>
       <div class="price" style="margin:0;white-space:nowrap">Custom</div>
     </article>
