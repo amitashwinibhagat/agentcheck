@@ -21,6 +21,15 @@ export async function loadUsage() {
       pill.title = `Plan: ${u.plan || "free"} · resets ${a.resets_at ? new Date(a.resets_at * 1000).toLocaleDateString() : "monthly"}`;
       pill.classList.toggle("low", (a.remaining ?? 1) <= Math.max(a.monthly_allowance * 0.1, 5));
     }
+    // Honesty about the judge. A keyless self-host runs the offline stub, and
+    // someone who does not know that would judge the product by keyword
+    // matching and leave convinced it is dumb. Say it plainly, once, with the
+    // fix — a warning that names the problem and the command.
+    if (u.judge === "stub") {
+      banner("Judging with the offline stub — keyword-based, no model. " +
+             "Set OPENAI_API_KEY (or TYPESAFE_API_KEY) and restart for real " +
+             "judgments.", "info");
+    }
   } catch { /* usage is informational; the queue still loads */ }
 }
 export function setLive(on) {

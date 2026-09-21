@@ -14,7 +14,15 @@ export async function loadChecksets() {
         `<option value="${esc(c.name)}">${esc(c.name)}` +
         `${c.builtin ? " (built-in)" : ""} · ${(c.checks || []).length} checks</option>`)
         .join("");
-      if (keep && state.checksets.some((c) => c.name === keep)) sel.value = keep;
+      if (keep && state.checksets.some((c) => c.name === keep)) {
+        sel.value = keep;
+      } else if (state.checksets.some((c) => c.name === "safety")) {
+        // Default to the general-purpose rubric. Without this the picker took
+        // whatever the API happened to list first — `code-review` — so a new
+        // user's first upload was judged against a merge-safety rubric and
+        // came back nonsense.
+        sel.value = "safety";
+      }
     }
     // Trust reads across all rubrics by default; a specific rubric narrows it.
     const tsel = $("trust-checkset");

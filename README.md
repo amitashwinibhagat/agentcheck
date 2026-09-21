@@ -85,7 +85,14 @@ open http://localhost:7373/
 ```
 
 **No key at all also works** — an offline stub judge keeps every feature
-runnable so you can evaluate before signing up for anything. To go live:
+runnable so you can evaluate before signing up for anything. The UI says so
+plainly when it's running, and one click measures that judge against the
+shipped 66-trace dataset (ECE and accuracy) so the calibration claim is not
+taken on faith:
+
+<p align="center"><img alt="Day one: the trust tab explains what it needs and offers to measure the judge" src="docs/screenshots/trust-day-one.png" width="900"></p>
+
+To go live:
 
 ```bash
 echo 'OPENAI_API_KEY=sk-…' > .env      # your key, or your provider's via OPENAI_BASE_URL

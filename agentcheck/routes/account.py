@@ -28,7 +28,8 @@ def register(app, store, guard, demo_mode, demo_key, ui_key):
         return {"key": ui_key}
 
     @app.get("/v1/usage")
-    async def usage(authorization: str | None = Header(None)):
+    async def usage(request: Request,
+                   authorization: str | None = Header(None)):
         key = shared.authorize(store, authorization)
         meta = store.key_meta(key) or {}
         allowance = meta.get("monthly_allowance", 500)
@@ -39,6 +40,10 @@ def register(app, store, guard, demo_mode, demo_key, ui_key):
             "used_in_window": guard.used(key),
             "qpm_limit": meta.get("qpm_limit"),
             "key_name": meta.get("name"),
+            # Which judge actually answers, resolved at startup. The UI shows
+            # an honest warning when this is the offline stub, instead of
+            # letting someone judge the product by keyword matching.
+            "judge": getattr(request.app.state, "judge", None),
             "plan": meta.get("plan", "free"),
             "trial_active": meta.get("trial_active", False),
             "trial_ends_at": meta.get("trial_ends_at"),
