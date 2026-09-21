@@ -66,6 +66,7 @@ OpenAI/Anthropic/LangChain wrappers (see README §History import).
 |---|---|---|
 | Billing | off | `AGENTCHECK_BILLING=razorpay` + plan ids |
 | Sign-in / teams | off | `AGENTCHECK_AUTH=workos` + WorkOS vars |
+| API docs (`/docs`, `/openapi.json`) | off | `AGENTCHECK_DOCS=1` |
 | Telemetry export | off | `AGENTCHECK_OTEL_ENDPOINT=…` |
 | Postgres | SQLite | `AGENTCHECK_DB_URL=postgresql://…` |
 | Demo mode | off | `AGENTCHECK_DEMO=1` (public demo key, seeded data) |
