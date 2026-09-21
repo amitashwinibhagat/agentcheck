@@ -443,7 +443,8 @@ agentcheck doctor
   BYOK path means no vendor signup is required to evaluate.
 
 Prefer hosted? The live instance handles TLS, uptime monitoring, verified
-nightly backups, and billing (Pro ₹24,999/mo, Team ₹79,999/mo, Enterprise custom,
+nightly backups, and billing (Pro $299/mo, Team $949/mo — billed in INR today,
+because the live payment account settles INR; Enterprise custom,
 included) at [app.35-253-233-192.sslip.io](https://app.35-253-233-192.sslip.io/).
 
 ## Why trust the numbers
