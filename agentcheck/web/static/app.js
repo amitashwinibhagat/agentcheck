@@ -284,8 +284,11 @@ async function boot() {
       $("rows").innerHTML = `<div class="empty">
         <h2>This workspace is private</h2>
         <p>It does not hand out a key the way the demo does. Enter the API key
-        you were issued to load the queue.</p>
-        <div class="doors"><button type="button" class="btn" data-door="key">Enter your key</button></div>
+        you were issued to load the queue — or self-host, which is free forever.</p>
+        <div class="doors">
+          <button type="button" class="btn" data-door="key">Enter your key</button>
+          <a class="btn ghost" href="/start">Get started</a>
+        </div>
       </div>`;
       $("rows").querySelector("[data-door]").addEventListener("click", () => gateForKey());
       return;

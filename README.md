@@ -72,7 +72,9 @@ wedge, and it is deliberate.
 > **Try it now** — the hosted demo is live at
 > [35-253-233-192.sslip.io](https://35-253-233-192.sslip.io/): a seeded
 > decision log, full Trust view, and the red-team suite. No signup for the demo;
-> keys are handed out automatically.
+> keys are handed out automatically. The conversion page — pricing, self-host,
+> the honest caveat that hosted signup is not yet enabled — is at
+> [/start](https://35-253-233-192.sslip.io/start).
 
 ## Quickstart
 

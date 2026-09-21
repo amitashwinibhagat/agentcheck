@@ -28,6 +28,31 @@ def test_workspace_html_served():
     assert 'id="ledger"' in r.text
     assert 'id="sheet-upload"' in r.text
     assert "text/html" in r.headers["content-type"]
+    # The demo is no longer a dead end: a stranger who likes it has a door.
+    assert 'href="/start"' in r.text
+
+
+def test_start_page_matches_the_catalogue_and_does_not_lie_about_signup():
+    """The conversion surface. Prices come from billing.PLANS so a brochure
+    cannot drift from what checkout would actually charge; and it must not
+    promise a Sign-up button that 404s (auth is built, not enabled)."""
+    from agentcheck import billing
+    client, _, _, _ = _client()
+    r = client.get("/start")
+    assert r.status_code == 200, r.text
+    body = r.text
+    assert "Self-host, free forever" in body or "Self-host" in body
+    assert "Apache" in body
+    for name, plan in billing.PLANS.items():
+        price = plan["price_inr"]
+        if price:
+            assert f"{price:,}" in body or str(price) in body, \
+                f"catalogue price {price} for {name} missing from /start"
+        assert str(plan["allowance"]) in body.replace(",", ""), \
+            f"allowance {plan['allowance']} for {name} missing from /start"
+    # Honesty: hosted self-serve is not open. A CTA that 404s is worse than none.
+    assert "not yet enabled" in body.lower() or "not enabled" in body.lower()
+    assert 'href="/v1/auth/login"' not in body
 
 
 def test_bootstrap_gives_local_key():
