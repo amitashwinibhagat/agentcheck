@@ -272,6 +272,14 @@ unlabeled call), and publishes in one click. Under 30 decided items it reports
 the numbers but refuses to claim the tier, and publishing with no labels is
 refused outright rather than writing a fabricated calibration.
 
+The batch is **stratified, not log order**: every failure is included, passes
+are spread across confidence bands, and distinct tools are preferred — the
+first 30 rows are usually 30 near-identical passes, which measures the sample
+instead of the judge. The running ECE appears as you label, so the number you
+are building is visible from the first sign-out instead of only at item 30:
+
+![Guided labeling: batch position, coverage, and the running ECE](docs/screenshots/labeling-hud.png)
+
 ## Red Team
 
 467 adversarial tool calls across 28 families — 8 *mechanics* (exfiltration,
@@ -396,12 +404,28 @@ user id — never the email, because emails get reassigned. Self-serve signup:
 first sign-in creates your workspace, the UI mints your first API key, shown
 once, stored hashed like every credential in this system.
 
+## Why not just a keyword filter?
+
+Fair question — and a keyword filter is often the right answer. The same 467
+attacks score **~75% ASR** against literal pattern matching and **3.2%**
+against a judge with deterministic screens under it. The honest breakdown of
+why, and when a regex really is the right tool:
+[docs/WHY-NOT-KEYWORDS.md](docs/WHY-NOT-KEYWORDS.md).
+
+```bash
+agentcheck redteam --judge stub       # the keyword baseline
+agentcheck redteam --judge openai     # a judge, with screens underneath
+```
+
 ## Self-host
 
 ```bash
 # the ten-minute path — see docs/SELFHOST.md
 echo 'OPENAI_API_KEY=sk-…' > .env
 docker compose up -d
+
+# something wrong? every self-host failure this project has hit, checked:
+agentcheck doctor
 ```
 
 - **Free forever, Apache-2.0, including commercial use.** No license key, no
@@ -453,6 +477,7 @@ Design details and the failure each decision prevents:
 | Doc | What it covers |
 |---|---|
 | [docs/SELFHOST.md](docs/SELFHOST.md) | Ten-minute private deploy, BYOK judges |
+| [docs/WHY-NOT-KEYWORDS.md](docs/WHY-NOT-KEYWORDS.md) | The 75% vs 3.2% ASR gap, and when a regex is the right answer |
 | [docs/TRUST.md](docs/TRUST.md) | The full loop: rubric → verdict → policy → human |
 | [docs/RUBRICS.md](docs/RUBRICS.md) | Writing and shipping rubrics |
 | [docs/HOSTING.md](docs/HOSTING.md) | Hosted deployment options and demo mode |

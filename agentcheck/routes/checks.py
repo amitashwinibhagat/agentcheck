@@ -278,7 +278,14 @@ def register(app, store, guard, cache, bus, reliability, default_judge):
                                 "allowance": allowance, "requested": batch_cost})
             raise HTTPException(402, shared.collision_message(store, key))
         run_id = "run_" + uuid.uuid4().hex[:12]
-        batch_trace_id = req.trace_id or _new_trace_id()
+        # NOT one trace for the whole upload. A batch is independent calls: the
+        # run_id groups the upload, while a trace_id identifies a *sequence of
+        # steps*. Sharing one trace across every row made 40 unrelated calls
+        # read as a single 40-step run in the Runs view. If the caller passes a
+        # top-level trace_id they are saying "these rows are one trace", so it
+        # is still honoured — and a row carrying its own trace_id has always
+        # grouped correctly (traces are grouped by the id they carry).
+        batch_trace_id = req.trace_id
         sem = asyncio.Semaphore(4)
 
         async def one(i, raw):

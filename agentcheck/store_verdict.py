@@ -212,6 +212,15 @@ class VerdictMixin:
                 "WHERE user_key = ? AND run_id IS NOT NULL",
                 (user_key,)).fetchone())
         return out
+    def total_results(self) -> int:
+        """Every result in the store, regardless of key.
+
+        `doctor` needs the store-wide count; `totals(key)` is per workspace, and
+        passing None to it returned a cheerful 0 — which reads as "empty store"
+        rather than "wrong question".
+        """
+        with self._conn() as c:
+            return _db.first(c.execute("SELECT COUNT(*) FROM results").fetchone())
     def result(self, user_key: str, result_id: str) -> dict | None:
         with self._conn() as c:
             row = c.execute(

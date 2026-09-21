@@ -21,6 +21,7 @@ from agentcheck.routes import calibration
 from agentcheck.routes import checksets
 from agentcheck.routes import checks
 from agentcheck.routes import evals
+from agentcheck.routes import labeling
 from agentcheck.routes import monitor
 from agentcheck.routes import policies
 from agentcheck.routes import rag

@@ -107,6 +107,9 @@ def create_app(store: Store, default_judge: str | None = None,
     # ── calibration ───────────────────────────────────────────────────
     routes.calibration.register(app, store, default_judge)
 
+    # ── choosing what to label (the measured-tier path) ───────────────
+    routes.labeling.register(app, store)
+
     routes.redteam.register(app, store, guard, default_judge)
     routes.runs.register(app, store)
 

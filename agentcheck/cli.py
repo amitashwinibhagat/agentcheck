@@ -187,6 +187,128 @@ def _checkset_opt(f):
 
 
 @cli.command()
+def doctor() -> None:
+    """Check the things that silently break a self-host.
+
+    Every one of these has cost real debugging time on this project: a stale
+    process holding the port (new code on disk, old code answering), a judge
+    key that is present but wrong, a data directory that is not writable, a
+    published calibration that is not valid JSON. Each line says what is true
+    and, when something is wrong, what to do about it.
+    """
+    import socket
+    import sys
+    from agentcheck import __version__ as ac_version
+
+    problems: list[str] = []
+    notes: list[str] = []
+
+    t = Table(title="agentcheck doctor", show_header=True)
+    t.add_column("check")
+    t.add_column("state")
+    t.add_column("detail")
+
+    def add(check: str, ok: bool, detail: str, fix: str | None = None) -> None:
+        t.add_row(check, "[green]ok[/green]" if ok else "[red]needs attention[/red]",
+                  detail)
+        if not ok:
+            problems.append(f"{check}: {fix or 'see the detail above'}")
+
+    # 1. Interpreter and package.
+    add("python", sys.version_info >= (3, 11), sys.version.split()[0])
+    add("agentcheck", True, f"version {ac_version}")
+
+    # 2. The store: which one, can we read and write it, and is it empty?
+    db_url = os.environ.get("AGENTCHECK_DB_URL", "").strip()
+    home = Path(os.environ.get("AGENTCHECK_HOME", Path.home() / ".agentcheck"))
+    try:
+        store = _store(None)
+        n_res = store.total_results()
+        keys = len(store.per_user())
+        add("store", True,
+            f"{store.dialect}" + (f" @ {db_url.split('@')[-1]}" if db_url else f" @ {home / 'agentcheck.db'}")
+            + f" — {n_res} results, {keys} keyed workspace(s)")
+    except Exception as e:
+        add("store", False, f"cannot open: {e}",
+            "check AGENTCHECK_HOME / AGENTCHECK_DB_URL and permissions")
+
+    # 3. Data directory writable — publishing a calibration needs it.
+    try:
+        home.mkdir(parents=True, exist_ok=True)
+        probe = home / ".doctor-write-probe"
+        probe.write_text("x")
+        probe.unlink()
+        add("data dir", True, f"writable: {home}")
+    except Exception as e:
+        add("data dir", False, f"not writable: {e}",
+            f"make {home} writable, or set AGENTCHECK_HOME elsewhere")
+
+    # 4. The judge: which one, is it constructible, and is the key present?
+    name = default_name()
+    try:
+        j = get_judge(name)
+        kind = "offline stub (keyword-based)" if name == "stub" else f"model {getattr(j, '_model', '?')}"
+        add("judge", True, f"{name} — {kind}")
+        if name == "stub":
+            notes.append("No judge key found, so judgments are keyword-based. "
+                         "Set OPENAI_API_KEY or TYPESAFE_API_KEY for real ones.")
+    except Exception as e:
+        add("judge", False, f"{name} unavailable: {e}",
+            "set the key named in the error, or AGENTCHECK_JUDGE=stub to run offline")
+
+    # 5. A published calibration, if any: present, parseable, big enough.
+    cal_path = home / "calibration.json"
+    if cal_path.exists():
+        try:
+            rep = json.loads(cal_path.read_text())
+            decided = (rep.get("decided") or {}).get("n")
+            ok = isinstance(decided, int)
+            enough = ok and decided >= 30
+            # A small calibration is NOT a failure: it is the expected state
+            # halfway through labeling, and the tier already handles it
+            # honestly. Only an unreadable file is a real problem — otherwise
+            # doctor's exit code would mean "you have not finished labeling",
+            # which is not a misconfiguration.
+            add("calibration", ok,
+                f"{cal_path.name}: {decided} decided items"
+                + ("" if enough else " (under 30: the tier stays consistency)"))
+            if ok and not enough:
+                notes.append("A calibration with under 30 decided items reports "
+                             "numbers but cannot move the tier — by design. "
+                             "Label more, or run `agentcheck calibrate "
+                             "--from-signoffs --publish` again.")
+        except Exception as e:
+            add("calibration", False, f"{cal_path} is not valid JSON: {e}",
+                "re-run `agentcheck calibrate --from-signoffs --publish`")
+    else:
+        add("calibration", True, "none published (tier: consistency)")
+
+    # 6. The port: a stale `serve` answering with old code is the single most
+    # confusing failure on this machine, because everything looks fine.
+    port = int(os.environ.get("AGENTCHECK_PORT", "7373"))
+    s = socket.socket()
+    s.settimeout(0.4)
+    in_use = s.connect_ex(("127.0.0.1", port)) == 0
+    s.close()
+    if in_use:
+        add("port", False, f"{port} is already in use",
+            f"something is serving on {port}; stop it (lsof -nP -iTCP:{port} "
+            f"-sTCP:LISTEN) or run --port on another number")
+    else:
+        add("port", True, f"{port} free")
+
+    console.print(t)
+    for n in notes:
+        console.print(f"[dim]note:[/dim] {n}")
+    if problems:
+        console.print("\n[bold]Fix these[/bold]")
+        for pr in problems:
+            console.print(f"  [yellow]![/yellow] {pr}")
+        raise SystemExit(1)
+    console.print("\n[green]all checks passed[/green]")
+
+
+@cli.command()
 @_data_dir_opt
 def init(data_dir: str | None) -> None:
     """Create the local store and verify the judge is live."""

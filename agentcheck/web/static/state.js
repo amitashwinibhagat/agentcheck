@@ -19,6 +19,10 @@ export const state = {
   selected: null,
   filter: "all",
   search: "",
+  // guided labeling: a stratified batch of unlabeled calls (see labeling.py)
+  labelBatch: null,   // {ids, coverage, items}
+  labelAt: -1,        // index within labelBatch.ids
+  labelRun: null,     // the running calibration from the last sign-out
   // rubric catalogue and the example door
   examples: [],
   checksets: [],

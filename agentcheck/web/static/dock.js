@@ -56,12 +56,60 @@ export function renderDock() {
       <button type="button" class="btn" data-assess="looks_correct" aria-pressed="${r.assessment === "looks_correct"}">Judgment is right</button>
       <button type="button" class="btn ghost" data-assess="actual_issue" aria-pressed="${r.assessment === "actual_issue"}">Missed something</button>
       <button type="button" class="btn ghost" data-assess="insufficient_context" aria-pressed="${r.assessment === "insufficient_context"}">Not enough context</button>
+      <span class="note" id="label-keys">press 1 · 2 · 3</span>
     </div>
+    ${labelHud()}
     <button type="button" class="btn ghost back" id="dock-back">← Back to queue</button>`;
   box.querySelectorAll("[data-assess]").forEach((b) =>
     b.addEventListener("click", () => assess(r.id, b.dataset.assess)));
   $("dock-back")?.addEventListener("click", () => $("dock").classList.remove("open"));
   if (r.trace_id) loadRunStrip(r.trace_id, r.id);
+}
+
+//: The guided-labeling strip: where you are in the batch, and the number you
+//: are building. A measured tier costs 30 sign-outs, and a counter that only
+//: appears at the end gives nobody a reason to reach it — so the ECE so far is
+//: shown from the first label, and labeled honestly as unreadable until there
+//: are enough decided items to mean anything.
+function labelHud() {
+  const b = state.labelBatch;
+  const run = state.labelRun;
+  if (!b && !run) return "";
+  const parts = [];
+  if (b?.ids?.length) {
+    const done = b.ids.filter((id) =>
+      state.results.find((x) => x.id === id)?.assessment).length;
+    parts.push(`Labeling batch <strong>${done} of ${b.ids.length}</strong>`);
+    const cov = b.coverage || {};
+    const vs = Object.entries(cov.verdicts || {})
+      .map(([v, n]) => `${n} ${v}`).join(", ");
+    if (vs) parts.push(`covers ${vs}`);
+    if ((cov.tools || []).length) parts.push(`${cov.tools.length} tools`);
+    const bands = Object.keys(cov.bands || {}).length;
+    if (bands) parts.push(`${bands} confidence band${bands === 1 ? "" : "s"}`);
+  }
+  if (run) {
+    if (run.decided >= 5 && run.ece != null) {
+      // "total" on purpose: the calibration covers every label in the
+      // workspace, which after a first session is more than this batch.
+      parts.push(`ECE <strong>${Number(run.ece).toFixed(3)}</strong> over `
+        + `${run.decided} total labels`
+        + (run.accuracy != null
+            ? ` (accuracy ${(run.accuracy * 100).toFixed(0)}% vs confidence `
+              + `${((run.mean_confidence ?? 0) * 100).toFixed(0)}%)`
+            : "")
+        + ` — ${run.read}`);
+    } else {
+      parts.push(`${run.decided} decided label${run.decided === 1 ? "" : "s"}`
+        + ` — too few to read a calibration yet`);
+    }
+    if (run.remaining > 0) {
+      parts.push(`${run.remaining} more to a measured tier`);
+    } else {
+      parts.push("enough for a measured tier — publish it in Trust");
+    }
+  }
+  return `<p class="note" id="label-hud">${parts.join(" · ")}</p>`;
 }
 export async function loadRunStrip(traceId, currentId) {
   const slot = document.getElementById("runstrip");
@@ -84,27 +132,52 @@ export async function loadRunStrip(traceId, currentId) {
 }
 export async function assess(id, assessment) {
   try {
-    await api(`/v1/results/${id}`, { method: "PATCH", body: JSON.stringify({ assessment }) });
+    const r = await api(`/v1/results/${id}`, {
+      method: "PATCH", body: JSON.stringify({ assessment }) });
     const row = state.results.find((x) => x.id === id);
     if (row) row.assessment = assessment;
     if (state.selected?.id === id) state.selected.assessment = assessment;
-    // Advance to the next call nobody has signed out. Labeling 30 items one at
-    // a time is the whole path to a measured tier, and stopping after each one
-    // made it a chore; the next unlabeled row is the only useful place to be.
+    // The response carries the calibration so far: the running ECE is the
+    // progress bar for the 30 labels a measured tier costs.
+    if (r && r.calibration) state.labelRun = r.calibration;
+    // Advance to the next call in the batch (or the next unlabeled one when
+    // there is no batch). Stopping after each label made 30 items a chore.
     advanceToUnassessed(id);
     renderDock(); renderLedger();
   } catch (e) { banner("Could not save your assessment: " + e.message); }
 }
 
-//: Which row to move to after a sign-out: the next one without an assessment,
-//: preferring rows below the current one so the eye keeps its place.
+//: Which row to move to after a sign-out. In guided mode it is the next
+//: unlabeled item of the batch — that plan is stratified, and it is the reason
+//: the user is here. Otherwise the next unlabeled row, preferring one below
+//: the current so the eye keeps its place.
 function advanceToUnassessed(fromId) {
+  const batch = state.labelBatch;
+  const unlabeled = (rid) => {
+    const r = state.results.find((x) => x.id === rid);
+    return r && !r.assessment;
+  };
+  if (batch?.ids?.length) {
+    for (let i = state.labelAt + 1; i < batch.ids.length; i++) {
+      if (unlabeled(batch.ids[i])) {
+        state.labelAt = i;
+        state.selected = state.results.find((x) => x.id === batch.ids[i]);
+        return;
+      }
+    }
+    for (let i = 0; i <= state.labelAt; i++) {
+      if (unlabeled(batch.ids[i])) {
+        state.labelAt = i;
+        state.selected = state.results.find((x) => x.id === batch.ids[i]);
+        return;
+      }
+    }
+    // Batch finished: fall through to the rest of the log.
+  }
   const rows = state.results;
   const i = rows.findIndex((x) => x.id === fromId);
-  if (i < 0) return;
-  const after = rows.slice(i + 1).find((x) => !x.assessment);
-  const any = rows.find((x) => !x.assessment);
-  const next = after || any;
+  const after = i >= 0 ? rows.slice(i + 1).find((x) => !x.assessment) : null;
+  const next = after || rows.find((x) => !x.assessment);
   if (next) state.selected = next;
 }
 

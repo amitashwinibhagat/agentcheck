@@ -258,7 +258,8 @@ def test_check_mints_trace_identity_when_absent():
     assert d["parent_span_id"] is None
 
 
-def test_batch_rows_share_one_trace_id():
+def test_batch_honours_an_explicit_trace_id():
+    """A caller who passes one trace_id is saying "these rows are one trace"."""
     client, key, _, _ = _client()
     h = {"Authorization": f"Bearer {key}"}
     traces = [{"request": f"b{i}", "tool": "search", "args": {}} for i in range(3)]
@@ -270,6 +271,33 @@ def test_batch_rows_share_one_trace_id():
     assert {row["trace_id"] for row in d["results"]} == {"tr_batch1"}
     v = client.get("/v1/traces/tr_batch1", headers=h)
     assert v.json()["n"] == 3
+
+
+def test_batch_rows_are_independent_traces_by_default():
+    """An upload of unrelated calls must not read as one giant run.
+
+    The batch used to stamp a single generated trace_id on every row, so 40
+    independent calls appeared in Runs as one 40-step run, and the dock's run
+    strip listed all 40 as if they were a sequence. The run_id is what groups
+    an upload; the trace_id says "a sequence of steps".
+    """
+    client, key, _, _ = _client()
+    h = {"Authorization": f"Bearer {key}"}
+    traces = [{"request": f"b{i}", "tool": "search", "args": {"q": i}}
+              for i in range(3)]
+    r = client.post("/v1/check-batch", headers=h, json={"traces": traces})
+    assert r.status_code == 200, r.text
+    rows = r.json()["results"]
+    assert len({row["trace_id"] for row in rows}) == 3, \
+        "independent calls must be independent traces"
+    assert len({row["run_id"] for row in rows}) == 1, "one upload is one run"
+    # ...and a row that carries its own trace_id still groups with its peers.
+    traces = [{"request": "a", "tool": "search", "args": {"q": 1}, "trace_id": "tr_x"},
+              {"request": "b", "tool": "search", "args": {"q": 2}, "trace_id": "tr_x"},
+              {"request": "c", "tool": "search", "args": {"q": 3}, "trace_id": "tr_y"}]
+    rows = client.post("/v1/check-batch", headers=h,
+                       json={"traces": traces}).json()["results"]
+    assert [row["trace_id"] for row in rows] == ["tr_x", "tr_x", "tr_y"]
 
 
 def test_catalog_has_at_least_21_and_stub_matches_labels():

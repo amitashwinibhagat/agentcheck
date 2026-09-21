@@ -126,12 +126,32 @@ export async function loadTrust() {
   const cal = $("trust-calibrate");
   if (cal) cal.addEventListener("click", () => runDemoCalibration(cs));
   const label = $("trust-label");
-  if (label) label.addEventListener("click", () => {
-    // Jump to the queue and select the first call nobody has signed out.
+  if (label) label.addEventListener("click", async () => {
+    // Guided labeling: a stratified batch, not log order. Log order is mostly
+    // near-identical passes, which measures the sample instead of the judge.
+    try {
+      state.labelBatch = await api("/v1/labeling/batch?size=30");
+    } catch { state.labelBatch = null; }
+    state.labelAt = -1;
     document.querySelector('[data-view="queue"]')?.click();
-    const next = state.results.find((r) => !r.assessment);
-    if (next) { state.selected = next; renderLedger(); renderDock(); }
-    else banner("Every call in this log is signed out — nothing left to label.", "info");
+    const first = (state.labelBatch?.ids || [])
+      .map((id) => state.results.find((r) => r.id === id))
+      .find((r) => r && !r.assessment) || state.results.find((r) => !r.assessment);
+    if (first) {
+      state.labelAt = (state.labelBatch?.ids || []).indexOf(first.id);
+      state.selected = first;
+      renderLedger(); renderDock();
+      $("dock")?.classList.add("open");
+      const cov = state.labelBatch?.coverage;
+      if (cov) {
+        banner(`Batch of ${state.labelBatch.ids.length}: `
+          + `${Object.entries(cov.verdicts || {}).map(([v, n]) => `${n} ${v}`).join(", ")}`
+          + `, ${(cov.tools || []).length} tools — label with 1 / 2 / 3, the `
+          + `running ECE appears as you go.`, "info");
+      }
+    } else {
+      banner("Every call in this log is signed out — nothing left to label.", "info");
+    }
   });
   const pub = $("trust-publish");
   if (pub) pub.addEventListener("click", () => publishSignoffs(pub, cs));
