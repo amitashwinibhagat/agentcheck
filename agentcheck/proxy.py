@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from agentcheck import auth
 from agentcheck import tracing
 from agentcheck import routes
-from agentcheck.judges import get_judge
+from agentcheck.judges import default_name, get_judge
 from agentcheck.limits import AnswerCache, QuotaGuard, WINDOW_SECONDS
 from agentcheck.reliability import ReliabilityModel, load_report
 from agentcheck.store import Store
@@ -21,12 +21,12 @@ from agentcheck.stream import Bus
 from agentcheck.web import mount_web
 
 
-def create_app(store: Store, default_judge: str = "typesafe",
+def create_app(store: Store, default_judge: str | None = None,
                cache: "AnswerCache | None" = None,
                bus: "Bus | None" = None,
                demo_mode: bool | None = None,
                auth_provider=None) -> FastAPI:
-    app = FastAPI(title="agentcheck", version="0.1.0")
+    app = FastAPI(title="agentcheck", version="0.2.0")
     # Identity provider: injected in tests, resolved from AGENTCHECK_AUTH in
     # production. NullAuthProvider refuses clearly when unconfigured.
     idp = auth_provider if auth_provider is not None else auth.get_provider()
@@ -35,13 +35,19 @@ def create_app(store: Store, default_judge: str = "typesafe",
     # instead of a startup warning — the opposite of what the Dockerfile and
     # .env.example promise. Falling back to the offline stub keeps a
     # key-less container useful, loudly.
+    #
+    # The name MUST be resolved here, not left as None: the cache is keyed by
+    # judge and the meter records it, so an unresolved None was labelled
+    # "typesafe" downstream and reported stub work as TypeSafe's.
+    resolved = (default_judge or "").strip() or default_name()
     try:
-        get_judge(default_judge)
+        get_judge(resolved)
     except Exception as e:
-        print(f"[agentcheck] judge {default_judge!r} unavailable ({e}); "
+        print(f"[agentcheck] judge {resolved!r} unavailable ({e}); "
               f"falling back to the offline stub judge", file=sys.stderr)
-        default_judge = "stub"
-    app.state.judge = default_judge
+        resolved = "stub"
+    default_judge = resolved
+    app.state.judge = resolved
     guard = QuotaGuard(store, WINDOW_SECONDS)
     cache = cache or AnswerCache()
     bus = bus or Bus()

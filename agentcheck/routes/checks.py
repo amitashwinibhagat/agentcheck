@@ -80,16 +80,23 @@ async def _run(key, state, questions, judge_name, guard, cache, store) -> dict:
                             "requested": len(questions)})
         raise HTTPException(402, shared.collision_message(store, key))
 
-    hit = cache.get(state, questions)
+    # Resolve the judge BEFORE the cache: cache entries are keyed by judge,
+    # and an unresolved name (None) would key writes by "stub" while reads
+    # looked up None — never hitting, and labelling hits from a default.
+    judge = get_judge(judge_name)
+    hit = cache.get(state, questions, judge.name)
     if hit is not None:
         cached_answers, cached_model = hit
-        store.record(user_key=key, judge=(judge_name or "typesafe"), model=cached_model,
+        # The judge that actually produced these answers is part of the key,
+        # so this is a fact about the row, not a guess. It used to read
+        # `judge_name or "typesafe"`, which credited TypeSafe with stub work
+        # whenever the caller passed no explicit judge.
+        store.record(user_key=key, judge=judge.name, model=cached_model,
                      request_id=None, input_tokens=0, output_tokens=0,
                      questions=len(questions), server_ms=None, cached=1, ok=1)
         return {"answers": [_answer_dict(a) for a in cached_answers],
                 "usage": {"cached": True}, "model": cached_model, "cached": True}
 
-    judge = get_judge(judge_name)
     loop = asyncio.get_running_loop()
     try:
         j = await loop.run_in_executor(None, judge.ask, state, questions)
@@ -104,7 +111,7 @@ async def _run(key, state, questions, judge_name, guard, cache, store) -> dict:
                  input_tokens=j.input_tokens, output_tokens=j.output_tokens,
                  questions=len(questions), server_ms=j.server_ms, cached=0, ok=1)
 
-    cache.put(state, questions, j.answers, j.model)
+    cache.put(state, questions, j.answers, j.model, judge.name)
     return {
         "answers": [_answer_dict(a) for a in j.answers],
         "usage": {"input_tokens": j.input_tokens, "output_tokens": j.output_tokens,

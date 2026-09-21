@@ -138,6 +138,61 @@ def test_answer_cache_is_lru_bounded():
     assert c.get({"k": 4}, qs) == (["ans"], "stub"), "most recently used survives"
 
 
+def test_answer_cache_is_scoped_by_judge():
+    """A cached answer belongs to the judge that produced it.
+
+    Without the judge in the key, a per-request `judge=` override was served
+    whichever judge ran first — and then metered under the requesting judge's
+    name. Both halves are pinned here: the miss, and the recorded label.
+    """
+    from agentcheck.limits import AnswerCache
+    c = AnswerCache()
+    qs = [__import__("agentcheck.judges.base", fromlist=["noul"]).noul("q", "x")]
+    c.put({"t": 1}, qs, ["stub-answer"], "stub", judge="stub")
+    assert c.get({"t": 1}, qs, "stub") == (["stub-answer"], "stub")
+    assert c.get({"t": 1}, qs, "openai") is None, \
+        "a different judge must not be served another judge's answers"
+
+
+def test_cache_hit_records_the_real_judge_not_a_vendor_default():
+    """The metering row for a cache hit names the judge that answered.
+
+    Reproduced live before the fix: on a keyless self-host the first row read
+    ('stub','stub',0) and the second ('typesafe','stub',1) — TypeSafe credited
+    with work the offline stub did.
+    """
+    import asyncio, tempfile
+    from pathlib import Path
+    from agentcheck.judges.base import noul
+    from agentcheck.limits import AnswerCache, QuotaGuard
+    from agentcheck.routes import checks
+    from agentcheck.store import Store
+    from agentcheck import checks as check_lib
+
+    store = Store(Path(tempfile.mkdtemp()) / "cache.db")
+    raw = store.create_key("t", qpm_limit=600)
+    key = store.lookup_key(raw)["kid"]  # _run gets the post-auth identity
+    guard = QuotaGuard(store, 60.0)
+    cache = AnswerCache()
+    qs = list(check_lib.get("safety").checks)
+    trace = {"request": "read the docs", "tool": "read_file",
+             "args": {"path": "/etc/passwd"}}
+
+    async def run():
+        # judge_name=None is the real-world case: a keyless self-host passes no
+        # explicit judge, so the resolved name must still be recorded.
+        return await checks._run(key, trace, qs, None, guard, cache, store)
+
+    first = asyncio.run(run())
+    second = asyncio.run(run())
+    assert second["cached"] is True, "second call should hit the cache"
+    with store._conn() as c:
+        rows = [dict(r) for r in c.execute(
+            "SELECT judge, cached FROM metering ORDER BY ts").fetchall()]
+    assert [(r["judge"], r["cached"]) for r in rows] == [("stub", 0), ("stub", 1)], \
+        f"cache hit must record the judge that answered: {rows}"
+
+
 def test_write_report_sanitizes_nan():
     cfg = parse_config("name: t\ndatasets: [seed]\njudges: [stub]\n", "t")
     rep = runner.config_hash(cfg)
