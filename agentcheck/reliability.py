@@ -24,36 +24,50 @@ from typing import Any
 BINS = 10
 
 
-def load_report(store) -> dict | None:
-    """The workspace's latest saved calibration report, if any.
-
-    `calibrate --publish` writes it to $AGENTCHECK_HOME (default
-    ~/.agentcheck); a copy next to the DB also works, for workspaces that
-    keep everything in one directory. None means uncalibrated, and the
-    model says so honestly.
-    """
-    candidates = []
+def _report_paths(store, name: str) -> list[Path]:
+    out = []
     home = os.environ.get("AGENTCHECK_HOME")
     if home:
-        candidates.append(Path(home) / "calibration.json")
+        out.append(Path(home) / name)
     else:
         try:
-            candidates.append(Path.home() / ".agentcheck" / "calibration.json")
+            out.append(Path.home() / ".agentcheck" / name)
         except Exception:
             pass
     try:
         # Postgres-backed stores have no local directory; the
         # AGENTCHECK_HOME sidecar above is the source of truth there.
         if getattr(store, "path", None) is not None:
-            candidates.append(store.path.parent / "calibration.json")
+            out.append(store.path.parent / name)
     except Exception:
         pass
-    for p in candidates:
-        try:
-            if p.exists():
-                return json.loads(p.read_text())
-        except Exception:
-            continue
+    return out
+
+
+def load_report(store, workspace_id: str | None = None) -> dict | None:
+    """The calibration report that applies to this workspace, if any.
+
+    Scoped PER WORKSPACE first (`calibration-<wid>.json`), because a single
+    instance-wide file meant one tenant publishing a calibration moved every
+    other tenant's trust tier to `measured`, attributing their ECE to someone
+    else's traffic. In a product that sells "the confidence is measured", a
+    tenant being handed another tenant's proof is the worst kind of wrong.
+
+    The instance-level `calibration.json` remains as an OPERATOR default:
+    `agentcheck calibrate --publish` on a single-tenant install has one
+    workspace and nothing to leak, and a hosted operator can deliberately set
+    a house model for everyone. Per-workspace wins when both exist.
+
+    None means uncalibrated, and the model says so honestly.
+    """
+    names = ([f"calibration-{workspace_id}.json"] if workspace_id else []) + ["calibration.json"]
+    for name in names:
+        for p in _report_paths(store, name):
+            try:
+                if p.exists():
+                    return json.loads(p.read_text())
+            except Exception:
+                continue
     return None
 
 

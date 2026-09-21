@@ -12,6 +12,23 @@ def yaml_dirs():
     return search_dirs()
 
 
+def _display_path(p) -> str:
+    """A search directory as something a caller can act on.
+
+    Absolute paths leak the host layout and the operator's username to any
+    authenticated caller. `~/…` and `$AGENTCHECK_HOME/…` are the same
+    information phrased as instructions instead of reconnaissance.
+    """
+    import os
+    from pathlib import Path
+    home = Path(os.environ.get("AGENTCHECK_HOME") or (Path.home() / ".agentcheck"))
+    try:
+        rel = Path(p).resolve().relative_to(home.resolve())
+        return f"$AGENTCHECK_HOME/{rel}"
+    except Exception:
+        return str(p).replace(str(Path.home()), "~")
+
+
 def register(app, store):
     @app.get("/v1/checksets")
     def list_checksets(authorization: str | None = Header(None)):
@@ -28,7 +45,7 @@ def register(app, store):
             except Exception as e:  # a broken rubric must not break the list
                 out.append({"name": name, "error": str(e)})
         return {"checksets": out, "problems": check_lib.dsl.YAML_PROBLEMS,
-                "search_paths": [str(p) for p in yaml_dirs()]}
+                "search_paths": [_display_path(p) for p in yaml_dirs()]}
 
     @app.post("/v1/checksets/reload")
     def reload_checksets(authorization: str | None = Header(None)):

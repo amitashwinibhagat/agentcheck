@@ -23,16 +23,19 @@ if TYPE_CHECKING:  # annotations only; the store is duck-typed at runtime
     from agentcheck.store import Store
 
 
-def _calibration_for(store: Store, checkset: str | None) -> dict | None:
+def _calibration_for(store: Store, checkset: str | None,
+                     workspace_id: str | None = None) -> dict | None:
     """The published calibration report, in the shape trust_score wants.
 
     This is the bridge the measured tier never had: `calibrate --publish`
     writes calibration.json for the reliability model, but the trust endpoint
     read nothing, so the tier could never leave `consistency` however many
     labels were supplied. Scoped by rubric — a calibration for `safety` must
-    not upgrade the tier for `refund-policy`.
+    not upgrade the tier for `refund-policy` — and by WORKSPACE, because an
+    instance-wide file let one tenant's publish move everybody's tier.
     """
-    report = trust.dataset_report_from_calibration(load_report(store))
+    report = trust.dataset_report_from_calibration(
+        load_report(store, workspace_id))
     if report and checkset and report.get("checkset") and \
             report["checkset"] != checkset:
         return None
@@ -53,8 +56,11 @@ def _trust_for(store: Store, key: str, checkset: str | None,
         adv = store.latest_event(key, "redteam_run")
     except Exception:
         adv = None
-    out = trust.trust_score(rows, gate=gate, adversarial=adv,
-                            dataset_report=_calibration_for(store, checkset))
+    ws = store.workspace_for_key(key)
+    out = trust.trust_score(
+        rows, gate=gate, adversarial=adv,
+        dataset_report=_calibration_for(store, checkset,
+                                       ws["id"] if ws else None))
     # Progress toward the measured tier, from the user's OWN labels. The score
     # cannot tell you how close you are; this can, and it is the one number
     # that turns "come back later" into "eight more".
@@ -124,7 +130,15 @@ def register(app, store):
                      "report with no labels would be a fabricated number")
         home = Path(os.environ.get("AGENTCHECK_HOME", Path.home() / ".agentcheck"))
         home.mkdir(parents=True, exist_ok=True)
-        target = home / "calibration.json"
+        # Per WORKSPACE. A single instance-wide calibration.json meant Alice
+        # publishing moved Bob's tier to `measured` with her ECE attached to
+        # his traffic — verified before this change, and a compliance problem
+        # for a hosted deployment.
+        ws = store.workspace_for_key(shared.authorize(store, authorization))
+        wid = (ws or {}).get("id")
+        if not wid:
+            raise HTTPException(403, "this key has no workspace")
+        target = home / f"calibration-{wid}.json"
         target.write_text(json.dumps(rep, indent=2))
         # The check pipeline reads the model at startup, so say so rather than
         # implying the correction changed mid-flight.

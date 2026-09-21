@@ -168,6 +168,10 @@ MIGRATIONS = (
     ("results", "span_id", "TEXT"),
     ("results", "parent_span_id", "TEXT"),
     ("api_keys", "workspace_id", "TEXT"),
+    # The authority a credential carries. A key minted INTO a workspace has no
+    # member row (it is a credential, not a person), so without this it derived
+    # role "member" — an owner's own first key could not invite anyone.
+    ("api_keys", "role", "TEXT"),
     ("results", "decision", "TEXT"),
     ("results", "policy", "TEXT"),
 )

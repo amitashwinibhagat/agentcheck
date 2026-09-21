@@ -58,8 +58,17 @@ def current_path(name: str) -> Path | None:
 
 
 def load(name: str, version: int | None = None,
-         split: str | None = None) -> list[dict]:
-    """Load a dataset: registry first, then a bundled seed, then a path."""
+         split: str | None = None, allow_path: bool = True) -> list[dict]:
+    """Load a dataset: registry first, then a bundled seed, then a path.
+
+    `allow_path` exists because a path is a *local operator* convenience and an
+    *HTTP* vulnerability. `agentcheck calibrate --dataset ./mine.json` is a
+    feature; `GET /v1/calibration?dataset=/etc/passwd` read any file the process
+    could open, parsed it as JSON, and 500'd on the ones that were not JSON —
+    leaking the server's absolute paths in the error on the way. HTTP callers
+    pass allow_path=False and can therefore only name a registered dataset or a
+    bundled seed.
+    """
     if version is not None:
         p = dir_for(name) / f"v{version}.json"
         if not p.is_file():
@@ -68,17 +77,27 @@ def load(name: str, version: int | None = None,
         p = current_path(name)
     if p is None:
         candidate = Path(name)
-        if candidate.is_file():
+        if allow_path and candidate.is_file():
             p = candidate
         else:
             seed = SEED_DIR / f"{name}.json"
             if seed.is_file():
                 p = seed
             else:
+                if not allow_path:
+                    # No filesystem detail crosses the wire: a caller who named
+                    # a path should learn nothing about the host layout.
+                    raise FileNotFoundError(
+                        f"unknown dataset {name!r}; list them with GET /v1/datasets")
                 raise FileNotFoundError(
                     f"dataset {name!r} not found in {root()}, as a path, "
                     f"or as a bundled seed")
-    data = json.loads(p.read_text())
+    try:
+        data = json.loads(p.read_text())
+    except (ValueError, OSError) as e:
+        # A caller handed us something unreadable-as-JSON. Say that, not which
+        # file or why: the detail is for the operator, who has the CLI.
+        raise FileNotFoundError(f"dataset {name!r} is not readable as JSON") from e
     rows = data["traces"] if isinstance(data, dict) and "traces" in data else data
     if split:
         rows = apply_split(rows, split)

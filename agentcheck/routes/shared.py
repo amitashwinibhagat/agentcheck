@@ -66,14 +66,28 @@ def is_local(request: Request | None) -> bool:
 def acting(store: Store, authorization: str | None) -> tuple[str, dict, str]:
     """(kid, workspace, role) for the caller.
 
-    A request acts on the workspace its key belongs to. During Layer 1 the
-    caller IS the key's owner, so the role comes from that member row —
-    the check is real, and Layer 2 just supplies a different user.
+    The role is the authority the CREDENTIAL carries, in this order:
+      1. `api_keys.role` — set when a key is minted, inheriting the creator's
+         role so a mint can never exceed its maker
+      2. a member row whose user_id is this kid — the original model, where a
+         key spawns a workspace and owns it
+      3. `member` — fail closed
+
+    Step 1 exists because step 2 alone left a key minted into an existing
+    workspace with no row at all, so an owner's own first key (the signup
+    flow) derived `member` and could not invite anyone.
     """
     key = authorize(store, authorization)
     ws = store.workspace_for_key(key)
     if ws is None:
         raise HTTPException(500, "key has no workspace")
+    row = store.lookup_kid(key)
+    stored = None
+    if row is not None:
+        keys = row.keys()
+        stored = row["role"] if "role" in keys else None
+    if stored:
+        return key, ws, stored
     role = "member"
     for m in ws.get("members") or []:
         if m.get("user_id") == key:

@@ -137,9 +137,18 @@ def register(app, store, idp):
         if len(store.workspace_keys(wid)) >= ME_KEY_LIMIT:
             raise HTTPException(429, f"key limit reached for this workspace "
                                      f"({ME_KEY_LIMIT}); use an existing key")
+        # The credential inherits the SIGNED-IN USER's role in this workspace,
+        # so it can do what they can and nothing more. Minting "member" here
+        # meant an owner's own first key could not invite (found by the
+        # adversarial suite, after signup shipped with it).
+        role = None
+        for m in store.workspace_members(wid):
+            if m.get("user_id") == user["id"]:
+                role = m.get("role")
+                break
         name = (req.name or "").strip() or "default"
         raw = store.create_key(name, qpm_limit=600, monthly_allowance=500,
-                               plan="free", workspace_id=wid)
+                               plan="free", workspace_id=wid, role=role)
         row = store.lookup_key(raw)
         return {"key": raw, "kid": row["kid"], "workspace_id": wid,
-                "plan": "free"}
+                "plan": "free", "role": role or "member"}

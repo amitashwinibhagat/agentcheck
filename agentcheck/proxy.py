@@ -26,7 +26,19 @@ def create_app(store: Store, default_judge: str | None = None,
                bus: "Bus | None" = None,
                demo_mode: bool | None = None,
                auth_provider=None) -> FastAPI:
-    app = FastAPI(title="agentcheck", version="0.2.0")
+    # The API surface is not advertised by default. `/docs`, `/redoc` and
+    # `/openapi.json` were public on every host — the earlier audit missed them
+    # because it swept `/v1` routes only — and they enumerate every endpoint,
+    # including the operator-facing ones. A local developer wants them; a
+    # deployment should opt in with AGENTCHECK_DOCS=1.
+    docs_on = (os.environ.get("AGENTCHECK_DOCS", "").strip()
+               in ("1", "true", "yes"))
+    app = FastAPI(
+        title="agentcheck", version=__import__("agentcheck").__version__,
+        docs_url="/docs" if docs_on else None,
+        redoc_url="/redoc" if docs_on else None,
+        openapi_url="/openapi.json" if docs_on else None,
+    )
     # Identity provider: injected in tests, resolved from AGENTCHECK_AUTH in
     # production. NullAuthProvider refuses clearly when unconfigured.
     idp = auth_provider if auth_provider is not None else auth.get_provider()

@@ -24,14 +24,19 @@ class KeysMixin:
     def create_key(self, name: str, qpm_limit: int = 600,
                    monthly_allowance: int = 500, plan: str = "free",
                    trial_days: int | None = None,
-                   workspace_id: str | None = None) -> str:
+                   workspace_id: str | None = None,
+                   role: str | None = None) -> str:
         """Create a key. The raw token is returned ONCE and never stored;
         only its hash lives in the DB from here on.
 
         Without workspace_id the key gets its own fresh workspace (CLI
         issuance, migrations). With one the key joins that workspace and no
         new workspace is spawned — the signup flow, where the workspace
-        already exists. A bad id fails loudly rather than orphaning a key."""
+        already exists. A bad id fails loudly rather than orphaning a key.
+
+        `role` is the authority the credential acts with. It must never exceed
+        the creator's role; callers pass their own.
+        """
         import secrets
         key = "ac_" + secrets.token_urlsafe(32)
         now = time.time()
@@ -41,10 +46,10 @@ class KeysMixin:
             if workspace_id is None:
                 c.execute(
                     "INSERT INTO api_keys (kid, key_hash, key_prefix, name, created, "
-                    "qpm_limit, monthly_allowance, plan, trial_ends_at) "
-                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    "qpm_limit, monthly_allowance, plan, trial_ends_at, role) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
                     (kid, _hash_key(key), key[:8], name, now, qpm_limit,
-                     monthly_allowance, plan, trial_ends_at),
+                     monthly_allowance, plan, trial_ends_at, role or "owner"),
                 )
                 self._attach_workspace(c, kid, name, plan=plan)
             else:
@@ -55,9 +60,10 @@ class KeysMixin:
                 c.execute(
                     "INSERT INTO api_keys (kid, key_hash, key_prefix, name, created, "
                     "qpm_limit, monthly_allowance, plan, trial_ends_at, "
-                    "workspace_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    "workspace_id, role) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                     (kid, _hash_key(key), key[:8], name, now, qpm_limit,
-                     monthly_allowance, plan, trial_ends_at, workspace_id),
+                     monthly_allowance, plan, trial_ends_at, workspace_id,
+                     role or "member"),
                 )
             c.execute(
                 "INSERT INTO events (ts, user_key, event, props_json) VALUES (?,?,?,?)",

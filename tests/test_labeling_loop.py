@@ -144,7 +144,8 @@ class TestPublishEndpoint(unittest.TestCase):
                         json={}, headers={"Authorization": f"Bearer {key}"})
         self.assertEqual(r.status_code, 422)
         self.assertIn("no decided sign-outs", r.text)
-        self.assertFalse((Path(self.home) / "calibration.json").exists(),
+        self.assertEqual([f for f in Path(self.home).iterdir()
+                          if f.name.startswith("calibration")], [],
                          "a refusal must not write a calibration file")
 
     def test_publish_writes_the_model_and_moves_the_tier(self):
@@ -161,7 +162,11 @@ class TestPublishEndpoint(unittest.TestCase):
         self.assertEqual(p.status_code, 200, p.text)
         body = p.json()
         self.assertEqual(body["tier_now"], "measured")
-        self.assertTrue((Path(self.home) / "calibration.json").exists())
+        # Per WORKSPACE now: one instance-wide file let a publish move every
+        # tenant's tier. See tests/test_adversarial.py::TestCalibrationIsPerTenant.
+        published = [f for f in Path(self.home).iterdir()
+                     if f.name.startswith("calibration-")]
+        self.assertEqual(len(published), 1, sorted(p.name for p in Path(self.home).iterdir()))
         after = client.get("/v1/trust", headers=h).json()
         self.assertEqual(after["tier"], "measured")
         self.assertEqual(after["dataset"], "your sign-outs")

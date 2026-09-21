@@ -19,6 +19,25 @@
 # log rotation bounds it instead.)
 (common) {
 	encode zstd gzip
+
+	# Security headers, once, for every site.
+	#
+	# The UI keeps the workspace key in sessionStorage and renders approve /
+	# block / remove-member controls, so two things matter here: it must not be
+	# framable (clickjacking an operator into approving a call is the attack),
+	# and a script injection must not be able to phone anywhere.
+	#
+	# CSP notes: 'unsafe-inline' is required for styles because the client
+	# sets style attributes from data (trust bars, verdict colours); scripts
+	# are NOT granted it, so an injected <script> still will not run.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://raw.githubusercontent.com; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+	}
 }
 
 (proxy-upstream) {

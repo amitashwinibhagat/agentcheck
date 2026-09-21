@@ -18,7 +18,10 @@ def register(app, store, default_judge):
         shared.authorize(store, authorization)
         shared.get_checkset(checkset)
         try:
-            rows = ds.load(dataset)
+            # allow_path=False: an HTTP caller names a registered dataset or a
+            # bundled seed, never a file on this host. Passing a path here used
+            # to read any JSON file the process could open, and 500 on the rest.
+            rows = ds.load(dataset, allow_path=False)
         except FileNotFoundError as e:
             raise HTTPException(404, str(e))
         if not rows:
