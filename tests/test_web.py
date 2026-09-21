@@ -55,6 +55,9 @@ def test_start_page_matches_the_catalogue_and_does_not_lie_about_signup():
     # Honesty: hosted self-serve is not open. A CTA that 404s is worse than none.
     assert "not yet enabled" in body.lower() or "not enabled" in body.lower()
     assert 'href="/v1/auth/login"' not in body
+    # A marketing page must not be a back door into the product. The logo
+    # stays on /start; CTAs go to self-host / GitHub, never to `/`.
+    assert 'href="/"' not in body, "/start must not dump a stranger into the app"
 
 
 def test_bootstrap_gives_local_key():

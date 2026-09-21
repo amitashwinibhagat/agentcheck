@@ -46,12 +46,11 @@ services:
     <<: *app
     environment:
       <<: *app-env
-      # 1 for a hosted prospect demo: hands out a capped key from any origin.
-      AGENTCHECK_DEMO: ${AGENTCHECK_DEMO:-1}
-      # Billing is deliberately ABSENT here. The demo hands its key to anyone
-      # via /v1/bootstrap, so arming checkout on it would let a stranger create
-      # live subscriptions on a shared payment account. It lives on
-      # agentcheck-prod only, and stays absent unless someone adds it back.
+      # Default 0: a public host must not hand out a key. AGENTCHECK_DEMO=1 is
+      # for a throwaway prospect box you control, never for the marketing URL.
+      # /start is the public page; `/` is the product and requires a key or a
+      # session. Billing stays absent here either way.
+      AGENTCHECK_DEMO: ${AGENTCHECK_DEMO:-0}
     volumes:
       # Named volume on the VM's persistent disk. Without this, every
       # rebuild starts from an empty database — the mistake we made on Fly.
