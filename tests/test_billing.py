@@ -268,7 +268,9 @@ class TestWebhookEndpoint(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         d = r.json()
         names = [p["name"] for p in d["plans"]]
-        self.assertEqual(names, ["free", "pro", "team"])
+        self.assertEqual(names, ["free", "pro", "team", "enterprise"])
+        ent = next(p for p in d["plans"] if p["name"] == "enterprise")
+        self.assertIsNone(ent["price_inr"], "enterprise is not a monthly SKU")
         self.assertEqual(d["provider"], "razorpay")
         self.assertTrue(d["configured"])
 

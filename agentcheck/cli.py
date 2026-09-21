@@ -1570,13 +1570,19 @@ def billing_cmd(plan: str | None) -> None:
     for col in ("plan", "allowance/mo", "qpm", "price", "provider plan id"):
         t.add_column(col)
     for p in billing.plans_public():
-        try:
-            pid = billing.plan_id_for(p["name"]) if p["name"] != "free" else "-"
-        except billing.BillingError:
-            pid = "[red]not set[/red]"
+        if p.get("price_inr") is None:
+            pid, price = "custom", "custom"
+        elif not p.get("price_inr"):
+            pid, price = "-", "free"
+        else:
+            try:
+                pid = billing.plan_id_for(p["name"])
+            except billing.BillingError:
+                pid = "[red]not set[/red]"
+            price = f"INR {p['price_inr']:,}"
         t.add_row(
             p["name"], f"{p['allowance']:,} questions", f"{p['qpm']:,}/min",
-            f"INR {p['price_inr']:,}" if p["price_inr"] else "free", pid)
+            price, pid)
     console.print(t)
     if provider.configured():
         console.print("[green]billing armed[/green] "

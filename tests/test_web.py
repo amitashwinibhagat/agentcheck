@@ -48,8 +48,10 @@ def test_start_page_matches_the_catalogue_and_does_not_lie_about_signup():
         if price:
             assert f"{price:,}" in body or str(price) in body, \
                 f"catalogue price {price} for {name} missing from /start"
-        assert str(plan["allowance"]) in body.replace(",", ""), \
-            f"allowance {plan['allowance']} for {name} missing from /start"
+        if plan["allowance"]:
+            assert str(plan["allowance"]) in body.replace(",", ""), \
+                f"allowance {plan['allowance']} for {name} missing from /start"
+    assert "Custom" in body and "Enterprise" in body
     # Honesty: hosted self-serve is not open. A CTA that 404s is worse than none.
     assert "not yet enabled" in body.lower() or "not enabled" in body.lower()
     assert 'href="/v1/auth/login"' not in body

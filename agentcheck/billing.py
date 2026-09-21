@@ -25,15 +25,23 @@ import json
 import os
 
 # Plans are the product, not an implementation detail: allowance is the
-# monthly judged-question budget, qpm the burst ceiling. Priced for agent
-# teams, not per-seat.
+# monthly judged-question budget, qpm the burst ceiling.
+#
+# Priced as a control plane, not a consumer app. ₹2,999/₹9,999 read as a
+# hobby SKU to an enterprise buyer — price is a quality signal in that
+# motion, and those numbers dismissed the product before the demo started.
+# Self-host stays ₹0 forever (Apache-2.0); that is the indie path, not a
+# discount on hosted. Enterprise is deliberately unpriced on the public
+# grid: annual contract, SSO/DPA/audit, not a fourth monthly card.
 PLANS: dict[str, dict] = {
     "free": {"allowance": 500, "qpm": 600, "label": "Free", "seats": 1,
              "price_inr": 0, "blurb": "Try it on one rubric."},
-    "pro": {"allowance": 25000, "qpm": 4000, "label": "Pro", "seats": 5,
-            "price_inr": 2999, "blurb": "A production agent, checked."},
-    "team": {"allowance": 200000, "qpm": 20000, "label": "Team", "seats": 25,
-             "price_inr": 9999, "blurb": "Several agents, shared workspace."},
+    "pro": {"allowance": 50000, "qpm": 4000, "label": "Pro", "seats": 5,
+             "price_inr": 24999, "blurb": "One production agent, in production."},
+    "team": {"allowance": 250000, "qpm": 20000, "label": "Team", "seats": 15,
+             "price_inr": 79999, "blurb": "Several agents, one audit trail."},
+    "enterprise": {"allowance": 0, "qpm": 0, "label": "Enterprise", "seats": 0,
+                   "price_inr": None, "blurb": "SSO, DPA, audit export. Annual."},
 }
 
 # Razorpay plan ids are per-environment, so they come from config.
